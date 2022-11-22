@@ -113,7 +113,6 @@ if __name__ == "__main__":
     val=.54
     flag = True
     i=0
-
     while(i<100000):
         dt = i 
         interface.run_pybullet(dt)
