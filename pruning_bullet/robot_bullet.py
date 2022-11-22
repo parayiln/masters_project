@@ -31,6 +31,14 @@ class Robot():
         # define world
         p.setGravity(0,0,-10)
         self.planeID = p.loadURDF("plane.urdf")
+        # self.line = p.createVisualShape(shapeType=p.GEOM_CYLINDER,
+        #                             rgbaColor=[1, 0, 1, 1],
+        #                             specularColor=[0.4, .4, 0],
+        #                             visualFramePosition=[.58,.6,0],
+        #                             radius=.01,
+        #                             length= 2)
+
+        # p.createMultiBody(baseVisualShapeIndex=self.line)
         # define robot
         self.robotStartPos = [0,0,0]
         self.robotStartOrn = p.getQuaternionFromEuler([0,0,0])
@@ -200,7 +208,6 @@ class Robot():
         joint_pos, _ , _ = self.getJointStates()
         J  = self.calc_jacobian(joint_pos)
         eeVelocity = np.dot(J,joint_vel)
-        print('End-effector velocity:', eeVelocity)
         return eeVelocity
 
     def getInverseVelocityKinematics(self, end_eff_velocity):

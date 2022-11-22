@@ -146,6 +146,7 @@ class Quad:
         p[0] = q[0] + 9 * cos(angle - pi / 4)
         p[1] = q[1] + 9 * sin(angle - pi / 4)
         cv.line(img, (int(p[0]), int(p[1])), (int(q[0]), int(q[1])), colour, 1, cv.LINE_AA)
+        cv.line(img, (210, 0), (210,200), (0,0,0), 2)
         cv.imshow('follow the leader', img)
         cv.waitKey(1)        
         

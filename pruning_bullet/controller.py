@@ -28,15 +28,15 @@ import copy
 import rospy
 
 
-try:
-    from math import pi, tau, dist, fabs, cos
-except:  # For Python 2 compatibility
-    from math import pi, fabs, cos, sqrt
+# try:
+#     from math import pi, tau, dist, fabs, cos
+# except:  # For Python 2 compatibility
+#     from math import pi, fabs, cos, sqrt
 
-    tau = 2.0 * pi
+#     tau = 2.0 * pi
 
-    def dist(p, q):
-        return sqrt(sum((p_i - q_i) ** 2.0 for p_i, q_i in zip(p, q)))
+#     def dist(p, q):
+#         return sqrt(sum((p_i - q_i) ** 2.0 for p_i, q_i in zip(p, q)))
 
 
 from std_msgs.msg import String
@@ -79,8 +79,9 @@ class BulletController():
         self.sensor=cam.Sensor()
         self.robot= robot_bullet.Robot()
         self.count=0
+        self.cam_offset = -.05
 
-    def move_up_down(self, direction, control_type, points_, vel_):
+    def move_up_down(self, direction, control_type, points_, vel_x):
         ee_pose, ee_oreint = self.robot.get_link_kinematics('cutpoint',as_matrix=False)
         link_id = self.robot.convert_link_name('cutpoint')
         pose=[]
@@ -103,9 +104,9 @@ class BulletController():
             joint_velocities = np.array([0, 0, 0, 0, 0, 0, 0])
             # end_eff_vel = self.robot.solveForwardVelocityKinematics(joint_angles, joint_velocities)
             if direction == 'down':
-                end_eff_vel = np.array([vel_[0], 0, -0.005, 0, 0, 0])
+                end_eff_vel = np.array([vel_x, 0, -0.01, 0, 0, 0])
             elif direction == 'up':
-                end_eff_vel = np.array([vel_[0], 0, 0.005, 0, 0, 0])
+                end_eff_vel = np.array([vel_x, 0, 0.01, 0, 0, 0])
 
             # print("end eff", end_eff_vel)
             joint_value = self.robot.getInverseVelocityKinematics(end_eff_vel)
@@ -139,7 +140,7 @@ class BulletController():
 
         point = np.matmul(tran_pix_world,[[1,0,0,(pixel[0]*scale)],[0,1,0,(pixel[1]*scale)],[0,0,1,(-.6+.322-.1)],[0,0,0,1]])
         point_ef = np.matmul(tran_pix_world,np.transpose([0,0,0,1]))
-        p.addUserDebugPoints([[point[0][3]-.1,point[1][3],point[2][3]]],[[1,1,1]],3)
+        p.addUserDebugPoints([[point[0][3],point[1][3],point[2][3]]],[[1,1,1]],3)
         p.addUserDebugPoints([[point_ef[0],point_ef[1],point_ef[2]]],[[0,0,1]],4)
         # time.sleep(2)
         # print(pixel, point[0][3], point[1][3], point[2][3])
@@ -149,83 +150,83 @@ class BulletController():
 
 
 
-class RosController():
-    def __init__(self):
+# class RosController():
+#     def __init__(self):
 
-        moveit_commander.roscpp_initialize(sys.argv)
-        self.moveit_robot = moveit_commander.RobotCommander()
-        self.moveit_planning_scene = scene = moveit_commander.PlanningSceneInterface()
-        group_name = "arm"
-        self.group = moveit_commander.MoveGroupCommander(group_name)
-        self.home_joints = [.543, -1.588, -1.2689, -1.08, 2.303, -1.67, 4.69]
-        self.display_trajectory_publisher = rospy.Publisher("/move_group/display_planned_path", moveit_msgs.msg.DisplayTrajectory,queue_size=20)       
-        self.go_to_joint_state(self.home_joints)        
-        # print(self.moveit_robot.get_current_state())
+#         moveit_commander.roscpp_initialize(sys.argv)
+#         self.moveit_robot = moveit_commander.RobotCommander()
+#         self.moveit_planning_scene = scene = moveit_commander.PlanningSceneInterface()
+#         group_name = "arm"
+#         self.group = moveit_commander.MoveGroupCommander(group_name)
+#         self.home_joints = [.543, -1.588, -1.2689, -1.08, 2.303, -1.67, 4.69]
+#         self.display_trajectory_publisher = rospy.Publisher("/move_group/display_planned_path", moveit_msgs.msg.DisplayTrajectory,queue_size=20)       
+#         self.go_to_joint_state(self.home_joints)        
+#         # print(self.moveit_robot.get_current_state())
 
 
-    def go_to_joint_state(self, joint_values):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.group
+#     def go_to_joint_state(self, joint_values):
+#         # Copy class variables to local variables to make the web tutorials more clear.
+#         # In practice, you should use the class variables directly unless you have a good
+#         # reason not to.
+#         move_group = self.group
 
-        joint_goal = joint_values
-        move_group.go(joint_goal, wait=True)
+#         joint_goal = joint_values
+#         move_group.go(joint_goal, wait=True)
 
-        # Calling ``stop()`` ensures that there is no residual movement
-        move_group.stop()
+#         # Calling ``stop()`` ensures that there is no residual movement
+#         move_group.stop()
 
-        ## END_SUB_TUTORIAL
+#         ## END_SUB_TUTORIAL
 
-        # For testing:
-        current_joints = move_group.get_current_joint_values()
-        return all_close(joint_goal, current_joints, 0.01)
+#         # For testing:
+#         current_joints = move_group.get_current_joint_values()
+#         return all_close(joint_goal, current_joints, 0.01)
 
    
 
-    def display_trajectory(self, plan):
-        robot = self.robot
-        display_trajectory_publisher = self.display_trajectory_publisher
+#     def display_trajectory(self, plan):
+#         robot = self.robot
+#         display_trajectory_publisher = self.display_trajectory_publisher
 
-        display_trajectory = moveit_msgs.msg.DisplayTrajectory()
-        display_trajectory.trajectory_start = robot.get_current_state()
-        display_trajectory.trajectory.append(plan)
-        # Publish
-        display_trajectory_publisher.publish(display_trajectory)
+#         display_trajectory = moveit_msgs.msg.DisplayTrajectory()
+#         display_trajectory.trajectory_start = robot.get_current_state()
+#         display_trajectory.trajectory.append(plan)
+#         # Publish
+#         display_trajectory_publisher.publish(display_trajectory)
 
-    def execute_plan(self, plan):
+#     def execute_plan(self, plan):
 
-        move_group = self.move_group
+#         move_group = self.move_group
 
-        move_group.execute(plan, wait=True)
-
-
-    def wait_for_state_update(
-        self, box_is_known=False, box_is_attached=False, timeout=4
-    ):
+#         move_group.execute(plan, wait=True)
 
 
-        box_name = self.box_name
-        scene = self.scene
-        start = rospy.get_time()
-        seconds = rospy.get_time()
-        while (seconds - start < timeout) and not rospy.is_shutdown():
-            # Test if the box is in attached objects
-            attached_objects = scene.get_attached_objects([box_name])
-            is_attached = len(attached_objects.keys()) > 0
-            is_known = box_name in scene.get_known_object_names()
+#     def wait_for_state_update(
+#         self, box_is_known=False, box_is_attached=False, timeout=4
+#     ):
 
-            # Test if we are in the expected state
-            if (box_is_attached == is_attached) and (box_is_known == is_known):
-                return True
 
-            # Sleep so that we give other threads time on the processor
-            rospy.sleep(0.1)
-            seconds = rospy.get_time()
+#         box_name = self.box_name
+#         scene = self.scene
+#         start = rospy.get_time()
+#         seconds = rospy.get_time()
+#         while (seconds - start < timeout) and not rospy.is_shutdown():
+#             # Test if the box is in attached objects
+#             attached_objects = scene.get_attached_objects([box_name])
+#             is_attached = len(attached_objects.keys()) > 0
+#             is_known = box_name in scene.get_known_object_names()
 
-        # If we exited the while loop without returning then we timed out
-        return False
-        ## END_SUB_TUTORIAL
+#             # Test if we are in the expected state
+#             if (box_is_attached == is_attached) and (box_is_known == is_known):
+#                 return True
+
+#             # Sleep so that we give other threads time on the processor
+#             rospy.sleep(0.1)
+#             seconds = rospy.get_time()
+
+#         # If we exited the while loop without returning then we timed out
+#         return False
+#         ## END_SUB_TUTORIAL
 
 
 
