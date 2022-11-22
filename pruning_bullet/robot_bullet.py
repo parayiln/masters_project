@@ -17,12 +17,6 @@ class Robot():
         self.robotUrdfPath = "/home/nidhi/masters_project/urdf/ur5_7thaxis.urdf"
         # connect to engine servers
         self.tree = "/home/nidhi/masters_project/meshes/ufo_trees_labelled/1_l.ply" # Read the point cloud
-        
-        # self.tree_point=[]
-        # self.tree_color=[]
-        # self.tree_origin=[-1,1.2,-1]
-        # self.get_tree()
-
         self.physicsClient = p.connect(self.serverMode)
 
         # add search path for loadURDF
@@ -233,16 +227,8 @@ class Robot():
             flag = True
             textPose = list(p.getBasePositionAndOrientation(self.robotID)[0])
             textPose[2] += 1
-            # p.addUserDebugText("Press \'w\' and magic!!", textPose, [255,0,0], 1)
-            # prevLinkID = 0
-            # linkIDIn = p.addUserDebugParameter("linkID", 0, linkNum-1e-3, 0)
             while(flag):
                 p.stepSimulation()
-            #     linkID = p.readUserDebugParameter(linkIDIn)
-            #     if linkID!=prevLinkID:
-            #         p.setDebugObjectColor(self.robotID, int(prevLinkID), [255,255,255])
-            #         p.setDebugObjectColor(self.robotID, int(linkID), [255,0,0])
-            #     prevLinkID = linkID
             p.disconnect()
         except:
             p.disconnect()

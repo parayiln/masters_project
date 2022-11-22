@@ -27,16 +27,7 @@ class Sensor():
         self.traj =[]
         self.vel=[]
         self.move_curr_branch = False
-
-    # def get_view_matrix(pan, tilt, xyz_offset, base_tf=None):
-
-    #     tf = compute_eye_transform(pan, tilt, xyz_offset, base_tf=base_tf)
-    #     viewpoint = tf[:3,3]
-    #     print(viewpoint)
-    #     lookat_point = np.array([0, 0, 0.1, 1])[:3]
-    #     return np.reshape(p.computeViewMatrix(cameraEyePosition=viewpoint,
-    #                                 cameraTargetPosition=lookat_point,
-    #                                 cameraUpVector=[0, 0, 1]), (4, 4)).T
+        self.no_of_branch_scaned = 0
 
     def read_cam_video(self, img):
         # frame = img[3]
@@ -115,7 +106,6 @@ class Sensor():
                 
         if self.move_curr_branch == True:
             print("move out of the wayyyyy", cnt_y[-1], width)
-            print(cnt_y[-1] - int(2*width/3))
             if cnt_y[-1] - int(2*width/3) == 0:
                 self.move_curr_branch=False
                 print("------moved the current leader out of sight-------")  
@@ -127,6 +117,7 @@ class Sensor():
                     self.center_leader=True
                     print("------centered! starting to follow the leader -------")
                     self.follow_leader=True
+
                     if tool[2][3]<.4:
                         direction = "up"
                     else:

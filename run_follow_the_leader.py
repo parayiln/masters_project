@@ -24,17 +24,30 @@ class Interface():
         for i in range(100):
             p.stepSimulation()
         self.val =.54
-        self.bezier =[0,0,0]
+        self.bezier =[0.45,0.6,0.8]
         self.pre_point = [0,0,0]
         self.ef_velocity=0
         self.direction = "none"
         self.error_integral = 0
-        self.branch_no = 0
-        self.no_of_branch_scan = 2
+        self.branch_no_to_scan = 2
+        self.fig_traj, self.ax_traj = plt.subplots()
+        # self.fig_joint_velocity = plt.figure()
+        self.time_cumulative = []
+        self.bezier_world_x = []
+        self.bezier_world_y = []
+        self.ef_traj_x = []
+        self.ef_traj_y = []
+        # for i in range(len(self.control.robot.control_joints)):
+        #     self.joint_velocity_+i = []
+
         # p.addUserDebugLine([.45,.6,0],[.45,.6,.85],[0,0,0],3,0)
 
-
-
+    def reset(self):
+        self.time_cumulative = []
+        self.bezier_world = []
+        self.ef_traj = [] 
+        self.error_integral = 0 
+    
     def run_pybullet(self, dt):
         ee_pose, ee_oreint = self.control.robot.get_link_kinematics('cutpoint',as_matrix=False)
         tool= self.control.robot.get_link_kinematics('wrist_3_link-tool0_fixed_joint',as_matrix=True)
@@ -49,7 +62,6 @@ class Interface():
                 point= self.control.traj_on_tree(mpt, tool)
                 # self.control.traj_on_tree(v2, tool)
                 self.bezier =[point[0]+self.control.cam_offset, point[1],point[2]]
-                error =0
                 print("tool",tool[2][3])
                 # for i in range(2):
                 error=(self.bezier[0]-self.pre_point)/dt
@@ -82,14 +94,25 @@ class Interface():
             self.sensor_flag = False
             control_type = "velocity"
             self.control.move_up_down(self.direction, control_type, self.bezier, self.ef_velocity)
+            self.time_cumulative.append(dt)
+            self.bezier_world_x.append(self.bezier[0])
+            self.bezier_world_y.append(self.bezier[2])
+            self.ef_traj_x.append(tool[0][3])
+            self.ef_traj_y.append(tool[2][3])
             # print("move one step")
             if (tool[2][3] < .3 and self.direction =="down") or (tool[2][3] > .81 and self.direction =="up"):
 
                 print("move to next tree")
                 self.control.sensor.center_leader = False
                 self.control.sensor.follow_leader = False
+                
+                self.control.sensor.no_of_branch_scaned = self.control.sensor.no_of_branch_scaned +1 
                 self.control.sensor.move_curr_branch = True
                 self.sensor_flag =True
+                self.ax_traj.plot(self.bezier_world_x,self.bezier_world_y)
+                self.ax_traj.plot(self.ef_traj_x,self.ef_traj_y)
+                self.reset()
+
             if dt%5 == 0:
                 self.sensor_flag = True
 
@@ -113,11 +136,17 @@ if __name__ == "__main__":
     val=.54
     flag = True
     i=0
-    while(i<100000):
+    while(True):
         dt = i 
         interface.run_pybullet(dt)
         i=i+1
+        if interface.control.sensor.no_of_branch_scaned == interface.branch_no_to_scan:
+            break
     print("done moving")
+    interface.fig_traj.suptitle("End effector trajectory and Bezeir points")
+    interface.fig_traj.legend(["bezier","ef"])
+    interface.fig_traj.savefig('/home/nidhi/masters_project/traj.png')
+    interface.fig_traj.show()
     time.sleep(100)
 
 
