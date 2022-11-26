@@ -1,154 +1,213 @@
 #!/usr/bin/env python
-# from enum import Flag
-import rospy
-from std_msgs.msg import String
-import geometry_msgs
-import moveit_commander
 import sys
 sys.path.append("/home/nidhi/masters_project/pruning_bullet")
-import robot_bullet as robot
-import controller as ctrl
-import sensor_rgbd as cam
-import pybullet as p
-import time
-import numpy as np
+
+
 import matplotlib.pyplot as plt
+import numpy as np
+import time
+import pybullet as p
+import controller as ctrl
+
+
 
 class Interface():
 
     def __init__(self):
-        self.control= ctrl.BulletController()
+        self.control = ctrl.BulletController()
         # self.ros_control= ctrl.RosController()
         self.control.robot.reset()
         self.sensor_flag = True
         for i in range(100):
             p.stepSimulation()
-        self.val =.54
-        self.bezier =[0.45,0.6,0.8]
-        self.pre_point = [0,0,0]
-        self.ef_velocity=0
+        self.ini_joint_pos_control = .54
+        self.cmd_joint_vel_control = -.1
+        self.bezier = [0.45, 0.6, 0.8]
+        self.ef_position_x = [0, 0, 0]
+        self.ef_velocity = 0
         self.direction = "none"
         self.error_integral = 0
-        self.branch_no_to_scan = 2
+        self.branch_no_to_scan = 1
+        self.branch_lower_limit = 0.32
+        self.branch_upper_limit = 0.84
+        self.time_step = 5
+        self.kp = 10000
+        self.ki = 0.005
+
         self.fig_traj, self.ax_traj = plt.subplots()
-        # self.fig_joint_velocity = plt.figure()
+        self.fig_joints_pos, self.ax_joints_pos = plt.subplots()
+        self.fig_joints_vel, self.ax_joints_vel = plt.subplots()
+        self.fig_joints_torque, self.ax_joints_torque = plt.subplots()
+        self.fig_joint_linear, self.ax_joint_linear = plt.subplots(3)
+
         self.time_cumulative = []
         self.bezier_world_x = []
         self.bezier_world_y = []
         self.ef_traj_x = []
         self.ef_traj_y = []
-        # for i in range(len(self.control.robot.control_joints)):
-        #     self.joint_velocity_+i = []
-
+        self.joint_velocity = []
+        self.joint_position = []
+        self.joint_torque = []
         # p.addUserDebugLine([.45,.6,0],[.45,.6,.85],[0,0,0],3,0)
+
+#######################################
 
     def reset(self):
         self.time_cumulative = []
         self.bezier_world = []
-        self.ef_traj = [] 
-        self.error_integral = 0 
-    
+        self.ef_traj = []
+        self.error_integral = 0
+        self.joint_velocity = []
+        self.joint_position = []
+        self.joint_torque = []
+
+######################################
+
+    def generate_plots(self, fig, ax, x_data, y_data):
+        ax.plot(x_data, y_data)
+
+#####################################
+
+    def add_plot_labels(self, fig, legends, title, plot_name):
+        fig.suptitle(title)
+        fig.legend(legends)
+        fig.savefig('/home/nidhi/masters_project/plots/'+plot_name+'.png')
+
+#########################################
+
+    def update_step_values(self, tool, dt, joint_pos, joint_vel, joint_torque):
+        self.time_cumulative.append(dt)
+        self.bezier_world_x.append(self.bezier[0])
+        self.bezier_world_y.append(self.bezier[2])
+        self.ef_traj_x.append(tool[0][3])
+        self.ef_traj_y.append(tool[2][3])
+        self.joint_position.append(joint_pos)
+        self.joint_velocity.append(joint_vel)
+        self.joint_torque.append(joint_torque)
+
+    ################################################
+
+    def update_after_one_branch(self):
+        self.control.sensor.leader_centered = False
+        self.control.sensor.follow_leader = False
+        self.control.sensor.no_of_branch_scaned = self.control.sensor.no_of_branch_scaned + 1
+        self.control.sensor.move_curr_branch = True
+        self.sensor_flag = True
+
+        self.generate_plots(self.fig_traj, self.ax_traj,
+                            self.bezier_world_x, self.bezier_world_y)
+        self.generate_plots(self.fig_traj, self.ax_traj,
+                            self.ef_traj_x, self.ef_traj_y)
+
+        temp_pose = zip(*self.joint_position)
+        temp_vel = zip(*self.joint_velocity)
+        temp_torque = zip(*self.joint_torque)
+
+        for i in range(1, 7):
+            self.generate_plots(
+                self.fig_joints_pos, self.ax_joints_pos, self.time_cumulative, temp_pose[i])
+            self.generate_plots(
+                self.fig_joints_vel, self.ax_joints_vel, self.time_cumulative, temp_vel[i])
+            self.generate_plots(
+                self.fig_joints_torque, self.ax_joints_torque, self.time_cumulative, temp_torque[i])
+
+        self.generate_plots(
+            self.fig_joint_linear, self.ax_joint_linear[0], self.time_cumulative, temp_pose[0])
+        self.generate_plots(
+            self.fig_joint_linear, self.ax_joint_linear[1], self.time_cumulative, temp_vel[0])
+        self.generate_plots(
+            self.fig_joint_linear, self.ax_joint_linear[2], self.time_cumulative, temp_torque[0])
+
+        self.reset()
+
+    ##############################################################
+    def follow_leader_img_process(self, rgbimg, tool):
+        p1, p2, pts, midpt = self.control.sensor.scan_leader(rgbimg)
+        self.ef_position_x = tool[0][3]
+        point = self.control.traj_on_tree(midpt, tool)
+        self.bezier = [
+            point[0]+self.control.cam_offset, point[1], point[2]]
+        error = (self.bezier[0]-self.ef_position_x)/dt
+
+        self.error_integral = error*dt+self.error_integral
+        self.ef_velocity = (self.kp*error+self.ki *
+                            self.error_integral+0*(error)/(dt*dt))
+
+    ############################################################
+    def move_to_center_leader(self, controller_type, rgbimg, tool):
+        self.direction = self.control.sensor.leader_centering(rgbimg, tool)
+        self.ef_current = [tool[0], tool[1], tool[2]]
+
+        if controller_type == "position":
+            joint_name = '7thjoint_prismatic'
+            self.ini_joint_pos_control = self.ini_joint_pos_control-0.0001
+            self.control.robot.move_Onejoint(
+                self.ini_joint_pos_control, joint_name, controller_type)
+
+        elif controller_type == "velocity":
+            joint_name = '7thjoint_prismatic'
+            self.control.robot.move_Onejoint(
+                self.cmd_joint_vel_control, joint_name, controller_type)
+
+###########################################################
+
+    def move_to_follow_leader(self, tool, control_type="velocity"):
+        self.sensor_flag = False
+        self.control.move_up_down(
+            self.direction, control_type, self.bezier, self.ef_velocity)
+        joint_pos, joint_vel, joint_torque = self.control.robot.getJointStates()
+        self.update_step_values(
+            tool, dt, joint_pos, joint_vel, joint_torque)
+
+        if (tool[2][3] < self.branch_lower_limit and self.direction == "down") or (tool[2][3] > self.branch_upper_limit and self.direction == "up"):
+            print("--- Finished scanning current branch moving to next --- ")
+            self.update_after_one_branch()
+
+        if dt % self.time_step == 0:
+            self.sensor_flag = True
+
+    ##########################################################
+
     def run_pybullet(self, dt):
-        ee_pose, ee_oreint = self.control.robot.get_link_kinematics('cutpoint',as_matrix=False)
-        tool= self.control.robot.get_link_kinematics('wrist_3_link-tool0_fixed_joint',as_matrix=True)
+        tool = self.control.robot.get_link_kinematics(
+            'wrist_3_link-tool0_fixed_joint', as_matrix=True)
         if self.sensor_flag == True:
-            
-            # cutpoint=self.control.robot.get_link_kinematics('cutpoint',as_matrix=True)
-            rgbimg=self.control.sensor.load_cam(tool)
-            # print("new image")
-            if self.control.sensor.follow_leader == True: 
-                v1, v2 , pts, mpt =self.control.sensor.scan_leader(rgbimg)
-                self.pre_point = tool[0][3]
-                point= self.control.traj_on_tree(mpt, tool)
-                # self.control.traj_on_tree(v2, tool)
-                self.bezier =[point[0]+self.control.cam_offset, point[1],point[2]]
-                print("tool",tool[2][3])
-                # for i in range(2):
-                error=(self.bezier[0]-self.pre_point)/dt
-                self.error_integral = error*dt+self.error_integral
-                self.ef_velocity =(10000*error+0.005*self.error_integral+0*(error)/(dt*dt))
-                print(self.ef_velocity)
-                        
+            rgbimg = self.control.sensor.load_cam(tool)
+            if self.control.sensor.follow_leader == True:
+                self.follow_leader_img_process(rgbimg, tool)
+        if self.control.sensor.leader_centered == False:
+            self.move_to_center_leader("velocity", rgbimg, tool)
 
-        if self.control.sensor.center_leader == False:
-            print("entered centering")
-            controller_type = "velocity"
-            
-            self.direction = self.control.sensor.leader_centering(rgbimg, tool)
-            ee_pose, ee_oreint = self.control.robot.get_link_kinematics('cutpoint',as_matrix=False)
-            self.ef_current= [ee_pose[0],ee_pose[1],ee_pose[2]]
-            if controller_type == "position":
-                joint_name = '7thjoint_prismatic'   
-                joint_val = self.control.robot.get_joint_state(joint_name)    
-                self.val = self.val-0.0001
-                self.control.robot.move_Onejoint(self.val, joint_name, controller_type)
-
-
-            elif controller_type =="velocity":
-                self.val =-.1
-                joint_name = '7thjoint_prismatic'
-                    # self.val = self.control.robot.getInverseVelocityKinematics(end_eff_vel)
-                self.control.robot.move_Onejoint(self.val, joint_name, controller_type)
-                
-        if self.control.sensor.follow_leader == True: 
-            self.sensor_flag = False
-            control_type = "velocity"
-            self.control.move_up_down(self.direction, control_type, self.bezier, self.ef_velocity)
-            self.time_cumulative.append(dt)
-            self.bezier_world_x.append(self.bezier[0])
-            self.bezier_world_y.append(self.bezier[2])
-            self.ef_traj_x.append(tool[0][3])
-            self.ef_traj_y.append(tool[2][3])
-            # print("move one step")
-            if (tool[2][3] < .3 and self.direction =="down") or (tool[2][3] > .81 and self.direction =="up"):
-
-                print("move to next tree")
-                self.control.sensor.center_leader = False
-                self.control.sensor.follow_leader = False
-                
-                self.control.sensor.no_of_branch_scaned = self.control.sensor.no_of_branch_scaned +1 
-                self.control.sensor.move_curr_branch = True
-                self.sensor_flag =True
-                self.ax_traj.plot(self.bezier_world_x,self.bezier_world_y)
-                self.ax_traj.plot(self.ef_traj_x,self.ef_traj_y)
-                self.reset()
-
-            if dt%5 == 0:
-                self.sensor_flag = True
-
+        elif self.control.sensor.follow_leader == True:
+            self.move_to_follow_leader(tool)
         p.stepSimulation()
-
-
-    def run_rosmoveit():
-        pass
-        
-
-
-
-
-
+    #############################################################################
 
 
 if __name__ == "__main__":
 
     interface = Interface()
-    
-    val=.54
-    flag = True
-    i=0
-    while(True):
-        dt = i 
+    i = 0
+    while (True):
+        dt = i
         interface.run_pybullet(dt)
-        i=i+1
+        i = i+1
         if interface.control.sensor.no_of_branch_scaned == interface.branch_no_to_scan:
             break
-    print("done moving")
-    interface.fig_traj.suptitle("End effector trajectory and Bezeir points")
-    interface.fig_traj.legend(["bezier","ef"])
-    interface.fig_traj.savefig('/home/nidhi/masters_project/traj.png')
-    interface.fig_traj.show()
-    time.sleep(100)
+    print("----Done Scanning -----")
 
+    interface.add_plot_labels(interface.fig_traj, [
+                              "bezier", "end effctor"], "End effector trajectory and Bezeir points", "traj")
+    interface.add_plot_labels(interface.fig_joints_pos, [
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint positions", "joint_pos")
+    interface.add_plot_labels(interface.fig_joints_vel, [
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint velocity", "joint_vel")
+    interface.add_plot_labels(interface.fig_joints_torque, [
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint torque", "joint_tor")
 
+    interface.ax_joint_linear[0].set_title("Position vs time")
+    interface.ax_joint_linear[1].set_title("Velocity vs time")
+    interface.ax_joint_linear[2].set_title("Force vs time")
+    interface.add_plot_labels(interface.fig_joint_linear, " ", "Linear Joint", "linear")
 
-
+    time.sleep(10)

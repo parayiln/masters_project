@@ -32,9 +32,9 @@
 
     <link name="trees">
       <visual>
-        <origin xyz="-1.05 .6 -.4" rpy="0 0 0"/>
+        <origin xyz="-.2 .6 -.4" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/no_spur_ufo.stl" scale=".1 .1 .1"/>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/2.stl" scale=".1 .1 .1"/>
         </geometry>
         <material name="brown">
           <color rgba=".58 .3 0 1.0"/>
@@ -43,7 +43,7 @@
       <collision>
         <origin xyz="-1 2 -.4" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/no_spur_ufo.stl" scale=".1 .1 .1"/>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/2.stl" scale=".1 .1 .1"/>
         </geometry>
       </collision>
     </link>

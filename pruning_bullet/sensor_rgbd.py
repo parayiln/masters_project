@@ -20,7 +20,7 @@ class Sensor():
         self.aspect = self.width / self.height
         self.near = 0.01
         self.far = .35
-        self.center_leader=False
+        self.leader_centered=False
         self.follow_leader=False
         self.first_scan = True
         self.Leader_Tree = False
@@ -114,7 +114,7 @@ class Sensor():
             if self.Leader_Tree == True:
                 print("setting up next branch")
                 if Leaders_y[-1] - int(width/2) == 0:
-                    self.center_leader=True
+                    self.leader_centered=True
                     print("------centered! starting to follow the leader -------")
                     self.follow_leader=True
 
@@ -123,7 +123,7 @@ class Sensor():
                     else:
                         direction = "down"
                 else:
-                    self.center_leader=False
+                    self.leader_centered=False
     
             
 
