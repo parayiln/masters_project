@@ -57,17 +57,20 @@ class Robot():
         self.end_effector_name = "wrist_3_joint"
         # self.reset()
         # p.stepSimulation()
+####################################################################
 
     def reset(self):
         self.move_joints(self.home_joints, "position")
         print("----------------------------------------")
         print("Robot moved to initial state")
+####################################################################
 
     def get_joint_state(self, joint_name):
         joint_id = self.joint_names_to_ids[joint_name]
         joint_position, joint_vel, joint_force, torque = p.getJointState(
             self.robotID, joint_id)
         return joint_position, joint_vel, joint_force, torque
+####################################################################
 
     def getJointStates(self):
         jointids = self.get_control_joints()
@@ -76,6 +79,7 @@ class Robot():
         joint_velocities = [state[1] for state in joint_states]
         joint_torques = [state[3] for state in joint_states]
         return joint_positions, joint_velocities, joint_torques
+####################################################################
 
     def load_joints(self):
         for i in range(self.num_joints):
@@ -94,6 +98,7 @@ class Robot():
             self.joints[info.name] = info
             if jointType in {p.JOINT_PRISMATIC, p.JOINT_REVOLUTE}:
                 self.revolute_and_prismatic_joints.append(i)
+####################################################################
 
     def get_control_joints(self):
         joint_ids = []
@@ -105,6 +110,7 @@ class Robot():
         joint_ids.append(self.joint_names_to_ids["wrist_2_joint"])
         joint_ids.append(self.joint_names_to_ids["wrist_3_joint"])
         return joint_ids
+####################################################################
 
     def move_joints(self, joint_values, control_type):
         # joint_ids = self.get_control_joints()
@@ -129,6 +135,7 @@ class Robot():
 
         p.setJointMotorControlArray(self.robotID, indexes, controller, targetPositions,
                                     targetVelocities, positionGains=[0.05]*len(poses), forces=forces)
+####################################################################
 
     def move_Onejoint(self, targets, joint_name,  control_type, include_prismatic=True):
         id = self.joint_names_to_ids[joint_name]
@@ -142,6 +149,7 @@ class Robot():
             targetVelocities = targets
         p.setJointMotorControl2(
             self.robotID, id, controller, targetPositions, targetVelocities)
+####################################################################
 
     def get_links(self):
 
@@ -149,11 +157,13 @@ class Robot():
             map(lambda linkInfo: linkInfo[1], p.getVisualShapeData(self.robotID)))
         linkNum = len(linkIDs)
         return linkNum
+####################################################################
 
     def convert_link_name(self, name):
         if isinstance(name, int):
             return name
         return self.joint_names_to_ids[name]
+####################################################################
 
     def get_link_kinematics(self, link_name_or_id, use_com_frame=False, as_matrix=False):
 
@@ -176,12 +186,14 @@ class Robot():
             return tf
         else:
             return position, orientation
+####################################################################
 
     def solve_end_effector_ik(self, link_name_or_id, target_position, target_orientation=None, threshold=None, max_iters=20):
 
         link_id = self.convert_link_name(link_name_or_id)
 
         return p.calculateInverseKinematics(self.robot.robotID, link_id, target_position[0:3])
+####################################################################
 
     def calc_jacobian(self, joint_pose):
         link_id = self.convert_link_name(self.end_effector_name)
@@ -198,6 +210,7 @@ class Robot():
                                                              computeForwardKinematics=1)
 
         return p.calculateJacobian(self.robotID, link_id, position_local, joint_pos, joint_vel, joint_acc)
+####################################################################
 
     def solveForwardVelocityKinematics(self, joint_vel):
         print('Forward velocity kinematics')
@@ -205,6 +218,7 @@ class Robot():
         J = self.calc_jacobian(joint_pos)
         eeVelocity = np.dot(J, joint_vel)
         return eeVelocity
+####################################################################
 
     def getInverseVelocityKinematics(self, end_eff_velocity):
         joint_pos, _, _ = self.getJointStates()
@@ -219,6 +233,7 @@ class Robot():
         else:
             joint_vel = np.dot(jacobian.T, end_eff_velocity)
         return joint_vel
+####################################################################
 
     def start_sim(self, ):
         # start simulation
@@ -231,11 +246,13 @@ class Robot():
             p.disconnect()
         except:
             p.disconnect()
+####################################################################
 
     def __test__(self):
         self.reset()
         link_num = self.get_links()
         self.start_sim(link_num)
+####################################################################
 
 
 if __name__ == "__main__":
