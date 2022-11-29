@@ -32,9 +32,9 @@
 
     <link name="trees">
       <visual>
-        <origin xyz="-.2 .6 -.4" rpy="0 0 0"/>
+        <origin xyz="-1.25 .6 -.5" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/2.stl" scale=".1 .1 .1"/>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/0.stl" scale=".1 .1 .1"/>
         </geometry>
         <material name="brown">
           <color rgba=".58 .3 0 1.0"/>

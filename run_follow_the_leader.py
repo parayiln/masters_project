@@ -9,6 +9,7 @@ import pybullet as p
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 
@@ -28,12 +29,12 @@ class Interface():
         self.ef_velocity = 0
         self.direction = "none"
         self.error_integral = 0
-        self.branch_no_to_scan = 1
+        self.branch_no_to_scan = 3
         self.branch_lower_limit = 0.32
         self.branch_upper_limit = 0.84
         self.time_step = .1
         self.sensor_time = 0
-        self.kp = 0.5
+        self.kp = 0.125
         self.ki = 0.005
         self.ini_time = time.time()
         self.cur_time = time.time()
@@ -77,10 +78,10 @@ class Interface():
 #####################################
 
     def add_plot_labels(self, fig, legends, title, plot_name):
-        fig.suptitle(title, fontsize=20)
+        fig.suptitle(title+" | kp ="+str(self.kp)+" ki ="+str(self.ki), fontsize=20)
         fig.legend(legends)
         fig.savefig('/home/nidhi/masters_project/plots/' +
-                    plot_name+str(self.ki)+str(self.kp)+'.png')
+                    plot_name+str(self.kp)+str(self.ki)+'0.png')
 
 #########################################
 
@@ -104,9 +105,9 @@ class Interface():
         self.sensor_flag = True
 
         self.generate_plots(self.ax_traj,
-                            self.bezier_world_x, self.bezier_world_y, "bezier x coordinate", "bezier y coordinate")
+                            self.bezier_world_x, self.bezier_world_y, "bezier x coordinate (m)", "bezier y coordinate")
         self.generate_plots(self.ax_traj,
-                            self.ef_traj_x, self.ef_traj_y, "end effector x coordinate", "end effector y coordinate")
+                            self.ef_traj_x, self.ef_traj_y, "end effector x coordinate (m)", "end effector y coordinate")
 
         temp_pose = zip(*self.joint_position)
         temp_vel = zip(*self.joint_velocity)
@@ -134,7 +135,7 @@ class Interface():
         midpt = self.control.sensor.scan_leader(rgbimg)
         if type(midpt) == type(None):
             self.tree_out_of_sight = True
-            print("---- Tree out of signt  ------")
+            print("---- Tree out of sight  ------")
             self.update_after_one_branch()
         else:
             self.ef_position_x = tool[0][3]
@@ -213,18 +214,20 @@ if __name__ == "__main__":
     print("----Done Scanning -----")
 
     interface.add_plot_labels(interface.fig_traj, [
-                              "bezier", "end effctor"], "End effector trajectory and Bezeir points", "traj")
+                              "bezier", "end effctor"], "End effector trajectory and Bezeir points", "traj/traj")
     interface.add_plot_labels(interface.fig_joints_pos, [
-                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint positions", "joint_pos")
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint positions", "joint_pos/joint_pos")
     interface.add_plot_labels(interface.fig_joints_vel, [
-                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint velocity", "joint_vel")
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint velocity", "joint_vel/joint_vel")
     interface.add_plot_labels(interface.fig_joints_torque, [
-                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint torque", "joint_tor")
+                              "joint 1", "joint 2", "joint 3", "joint 4", "joint 5", "joint 6"], "Revolute joint torque", "joint_force/joint_tor")
 
     interface.ax_joint_linear[0].set_title("Position vs time", fontsize=20)
     interface.ax_joint_linear[1].set_title("Velocity vs time", fontsize=20)
     interface.ax_joint_linear[2].set_title("Force vs time", fontsize=20)
     interface.add_plot_labels(
-        interface.fig_joint_linear, " ", "Linear Joint", "linear")
+        interface.fig_joint_linear, " ", "Linear Joint ", "linear/linear")
 
-    time.sleep(10)
+    data = np.asarray(interface.bezier_world_x,interface.bezier_world_y,interface.ef_traj_x,interface.ef_traj_y)
+    pd.DataFrame(data).to_csv('traj.csv')  
+    time.sleep(1)

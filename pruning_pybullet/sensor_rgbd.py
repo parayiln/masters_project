@@ -7,6 +7,7 @@ import numpy as np
 import pybullet as p
 import robot_bullet
 import cv2 as cv
+import time
 import pca as pca
 
 
@@ -27,6 +28,7 @@ class Sensor():
         self.vel = []
         self.move_curr_branch = False
         self.no_of_branch_scaned = 0
+        self.thres_out_of_sight =100
 ####################################################################
 
     def read_cam_video(self, img):
@@ -67,6 +69,7 @@ class Sensor():
 
     def leader_centering_img_process(self, rgb_img):
         img = self.read_cam_video(rgb_img)
+        
         height = img.shape[0]
         width = img.shape[1]
         lower_red = np.array([60, 40, 40])
@@ -92,7 +95,7 @@ class Sensor():
 
     def get_right_leader(self, width, cnt_y):
         for y in cnt_y:
-            Leaders_y = []
+            Leaders_y = [0]
             self.leader_on_right(y, int(width/2))
             if self.Leader_Tree == True:
                 Leaders_y.append(y)
@@ -105,16 +108,18 @@ class Sensor():
         cnt_y, width, heigth, img = self.leader_centering_img_process(rgb_img)
         if len(cnt_y) != 0:
             Leaders_y = self.get_right_leader(width, cnt_y)
+        else:
+            Leaders_y = [0]
 
         if self.move_curr_branch == True:
-            print("move out of the wayyyyy", cnt_y[-1], width)
-            if cnt_y[-1] - int(2*width/3) == 0:
+            print("move out of the wayyyyy", cnt_y)
+            if max(cnt_y) - int(self.thres_out_of_sight+width/2) == 0:
                 self.move_curr_branch = False
                 print("------moved the current leader out of sight-------")
 
         else:
             if self.Leader_Tree == True:
-                print("setting up next branch")
+                print("setting up next branch",(Leaders_y[-1] - int(width/2)))
                 if Leaders_y[-1] - int(width/2) == 0:
                     self.leader_centered = True
                     print("------centered! starting to follow the leader -------")
@@ -129,6 +134,7 @@ class Sensor():
 
         cv.line(img, (int(width/2), 0), (int(width/2), heigth), (255, 0, 0), 2)
         self.show_cam_video(img)
+        
         return direction
  ####################################################################
 
@@ -154,6 +160,7 @@ class Sensor():
 ####################################################################
     def scan_leader_img_process(self, rgb_img):
         img = self.read_cam_video(rgb_img)
+        # cv.imwrite('/home/nidhi/masters_project/plots/center.png',img)
         height = img.shape[0]
         width = img.shape[1]
         self.show_cam_video(img)

@@ -172,15 +172,12 @@ class PCA(object):
         self.vector_len = 0
         self.angle_pre = 0
         self.vector_len_pre = 0
-        self.dt = 10
-        self.ki = .2
-        self.kp = 1
-        self.kd = 1
         self.pixel = 100
         self.curve_point = []
         self.vector_list = []
         self.vector_list_sameTree = []
         self.vec_list = {}
+        self.same_tree_threshold = [self.img_w/2-200,self.img_w/2+200 ]
         # cv.imshow('original image', self.img)
         # cv.waitKey(10)
 ####################################################################
@@ -277,7 +274,7 @@ class PCA(object):
     def get_center_onSameTree(self, width):
         for vectors in self.vector_list:
             # cutter on right side in the image
-            if vectors[0] > (width*.1) and vectors[0] < (width-width*.05):
+            if vectors[0] > (self.same_tree_threshold[0]) and vectors[0] < (self.same_tree_threshold[1]):
                 self.vector_list_sameTree.append(vectors)
 ####################################################################
 
