@@ -19,7 +19,7 @@ class Plot_on_tree():
         self.img= self.ax.imshow(self.image, extent=[0, self.img_dim[1], 0, self.img_dim[0]])
         # self.plot_traj()
         # self.df = pd.read_csv("traj_hsv.csv")
-        self.df_last = pd.read_csv("traj_hsv.csv")
+        self.df_last = pd.read_csv("results/traj_hsv.csv")
         # self.trajs = self.df.to_numpy()
         self.trajs_last = self.df_last.to_numpy()
         # self.ef_x, self.ef_y = self.scale_traj(self.trajs[2], self.trajs[3], self.tree_location_urdf) 

@@ -264,5 +264,5 @@ if __name__ == "__main__":
     # #     interface.fig_joint_linear, " ", "Linear Joint ", "linear/linear")
 
     data = np.asarray([interface.bezier_world_x,interface.bezier_world_y,interface.ef_traj_x,interface.ef_traj_y])
-    pd.DataFrame(data).to_csv('traj_hsv.csv')
+    pd.DataFrame(data).to_csv('results/traj_hsv.csv')
     time.sleep(5)
