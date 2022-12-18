@@ -121,7 +121,7 @@ class Quad:
             self.vel.append([vel_p1[0], vel_p1[1]])
         for p1 in pts:
             self.traj.append([p1[0], p1[1]])
-        cv.line(image, (a[0], a[1]), (b[0], b[1]), (0, 0, 0), thickness=1)
+        # cv.line(image, (a[0], a[1]), (b[0], b[1]), (0, 0, 0), thickness=1)
         curve_mid_pt = pts[int(len(pts[0:-1])/2)]
         return image, curve_mid_pt, self.traj
 

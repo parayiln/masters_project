@@ -24,7 +24,7 @@ class ImageProcessor(ABC):
     @abstractmethod
     def mask_to_centered(self, mask):
         pass
-        #output boolean (is centered or not)
+        #updates flags (is centered or not)
 
 
 class HSVBasedImageProcessor(ImageProcessor):
@@ -128,7 +128,6 @@ class HSVBasedImageProcessor(ImageProcessor):
                 print("------moved the scanned leader out of sight-------")
         else:
             if self.leader_on_right == True:
-                # print("setting up next branch",cnt_y, int(self.img_w))
                 if cnt_y - int(self.img_w/2) ==  0:
                     self.leader_centered = True
                     print("------centered! starting to follow the leader -------")

@@ -60,6 +60,7 @@ class PybulletRobotSetup(RobotSetup):
         self.aspect = self.width / self.height
         self.near = 0.01
         self.far = .35
+
 ####################################################################
     def get_rgb_image(self):
         ee_position = self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
@@ -93,12 +94,15 @@ class PybulletRobotSetup(RobotSetup):
         return rgb_img
 
 ####################################################################
-
+    def robot_step(self):
+        p.stepSimulation()
 
     def reset(self):
         self.move_joints(self.home_joints, "position")
         print("----------------------------------------")
         print("Robot moved to initial state")
+        for i in range(100):
+            p.stepSimulation()
 ####################################################################
 
     def get_joint_state(self, joint_name):
