@@ -16,14 +16,14 @@ class PIController():
         self.error_integral =0
 
     def get_pi_values(self, curr_pt, desired_pt, time_step):
-        ee_position_x = curr_pt[0][3]
+        end_effector_position_x = curr_pt[0][3]
         point = self.pixel_to_world(desired_pt)
         bezier = [point[0]+self.cam_offset, point[1], point[2]]
-        error = (bezier[0]-ee_position_x)  # /self.time_step
+        error = (bezier[0]-end_effector_position_x)  # /self.time_step
 
         self.error_integral = error*time_step+self.error_integral
-        ee_velocity = (self.kp*error+self.ki * self.error_integral)
-        return ee_velocity, bezier
+        end_effector_velocity = (self.kp*error+self.ki * self.error_integral)
+        return end_effector_velocity, bezier
             
 
     def pixel_to_world(self, pixel):
@@ -44,15 +44,15 @@ class PIController():
 
 
 
-class Interface():
+class RunFollowTheLeader():
 
-    def __init__(self):
+    def __init__(self, controller, img_process):
         robot.reset()
         self.sensor_flag = True
         self.ini_joint_pos_control = .54
         self.cmd_joint_vel_control = -.1
         self.bezier = [0., 0., 0.]
-        self.ee_velocity = 0
+        self.end_effector_velocity = 0
         self.direction = "none"
         self.error_integral = 0
         self.branch_no_to_scan = 2
@@ -60,12 +60,14 @@ class Interface():
         self.branch_upper_limit = 0.84
         self.time_step = .1
         self.sensor_time = 0
+        self.controller = controller
+        self.img_process = img_process
 
         self.ini_time = time.time()
         self.cur_time = time.time()
         self.tree_out_of_sight = False
         self.joint_pos_curr = 0
-        self.ee_velocity_z = 0.005
+        self.end_effector_velocity_z = 0.005
         self.time_cumulative = []
         self.bezier_world_x = []
         self.bezier_world_y = []
@@ -77,7 +79,6 @@ class Interface():
         # self.euler_joint = []
         # p.addUserDebugLine([.45,.6,0],[.45,.6,.85],[0,0,0],3,0)
 
-#######################################
 
     def reset(self):
         self.time_cumulative = []
@@ -88,7 +89,7 @@ class Interface():
         self.joint_position = []
         self.joint_torque = []
 
-#####################################
+
 
     def update_step_values(self, tool, time_, joint_pos, joint_vel, joint_torque):
         self.time_cumulative.append(time_)
@@ -100,43 +101,41 @@ class Interface():
         self.joint_velocity.append(joint_vel)
         self.joint_torque.append(joint_torque)
 
-    ################################################
 
     def update_after_one_branch(self):
-        img_process.leader_centered = False
-        img_process.follow_leader = False
-        img_process.no_of_branch_scaned = img_process.no_of_branch_scaned + 1
-        img_process.move_curr_branch = True
+        self.img_process.leader_centered = False
+        self.img_process.follow_leader = False
+        self.img_process.no_of_branch_scaned = self.img_process.no_of_branch_scaned + 1
+        self.img_process.move_curr_branch = True
         self.sensor_flag = True
         self.reset()
 
-    ##############################################################
+    
     def get_follow_leader_velocity(self, rgbimg, tool, time_):
-        mask = img_process.image_to_mask(rgbimg)
-        midpt = img_process.mask_to_curve(mask,rgbimg)
+        mask = self.img_process.image_to_mask(rgbimg)
+        midpt = self.img_process.mask_to_curve(mask,rgbimg)
         if type(midpt) == type(None):
             self.tree_out_of_sight = True
             print("---- Tree out of sight  ------")
             self.update_after_one_branch()
         else:
-            self.ee_velocity, self.bezier = controller.get_pi_values(tool, midpt, self.time_step)
+            self.end_effector_velocity, self.bezier = self.controller.get_pi_values(tool, midpt, self.time_step)
             self.sensor_time = time_
 
-    ############################################################
+    
     def move_to_center_leader(self, rgbimg, endeffector):
-        mask = img_process.image_to_mask(rgbimg)
+        mask = self.img_process.image_to_mask(rgbimg)
         if endeffector[2][3]<0.4:
             self.direction="up"
         elif endeffector[2][3]>.75:
             self.direction="down"
-        img_process.mask_to_centered(mask,rgbimg)
+        self.img_process.mask_to_update_center_flags(mask,rgbimg)
         robot.handle_control_centering(self.cmd_joint_vel_control)
 
-###########################################################
 
     def move_to_follow_leader(self, time_, tool):
         self.sensor_flag = False
-        euler_joint_vel = robot.handle_control_velocity(self.ee_velocity, self.ee_velocity_z,self.direction)
+        euler_joint_vel = robot.handle_control_velocity(self.end_effector_velocity, self.end_effector_velocity_z,self.direction)
         joint_pos, joint_vel, joint_torque = robot.getJointStates()
         self.update_step_values(
             tool, time_, joint_pos, joint_vel, joint_torque)
@@ -147,7 +146,6 @@ class Interface():
         if time_ - self.sensor_time > self.time_step:
             self.sensor_flag = True
 
-    ##########################################################
 
     def run(self):
         time_ = time.time()-self.ini_time
@@ -155,32 +153,31 @@ class Interface():
             'wrist_3_link-tool0_fixed_joint', as_matrix=True)
         if self.sensor_flag == True:
             rgbimg = robot.load_cam(tool)            
-            if img_process.follow_leader == True:
+            if self.img_process.follow_leader == True:
                 self.get_follow_leader_velocity(rgbimg, tool, time_)
-        if img_process.leader_centered == False:
+        if self.img_process.leader_centered == False:
             self.move_to_center_leader(rgbimg, tool)
 
-        elif img_process.follow_leader == True:
+        elif self.img_process.follow_leader == True:
             self.move_to_follow_leader(time_, tool)
         robot.robot_step()
 
-    #############################################################################
 
 
 if __name__ == "__main__":
     from robot_env import PybulletRobotSetup
     from image_processor import HSVBasedImageProcessor
-    controller = PIController()
-    img_process = HSVBasedImageProcessor()
+    picontroller = PIController()
+    imgprocess = HSVBasedImageProcessor()
     robot = PybulletRobotSetup()
-    interface = Interface()
+    run_FollowTheLeader = RunFollowTheLeader(picontroller, imgprocess)
     while (True):       
-        interface.run()
-        if img_process.no_of_branch_scaned == interface.branch_no_to_scan:
+        run_FollowTheLeader.run()
+        if imgprocess.no_of_branch_scaned == run_FollowTheLeader.branch_no_to_scan:
             break
-        if interface.tree_out_of_sight == True:
+        if run_FollowTheLeader.tree_out_of_sight == True:
             break
     print("----Done Scanning -----")
-    data = np.asarray([interface.bezier_world_x,interface.bezier_world_y,interface.ef_traj_x,interface.ef_traj_y])
+    data = np.asarray([run_FollowTheLeader.bezier_world_x,run_FollowTheLeader.bezier_world_y,run_FollowTheLeader.ef_traj_x,run_FollowTheLeader.ef_traj_y])
     pd.DataFrame(data).to_csv('results/traj_hsv.csv')
     time.sleep(5)

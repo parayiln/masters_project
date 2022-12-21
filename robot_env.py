@@ -61,7 +61,6 @@ class PybulletRobotSetup(RobotSetup):
         self.near = 0.01
         self.far = .35
 
-####################################################################
     def get_rgb_image(self):
         ee_position = self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
         rgb_raw = self.load_cam(ee_position)
@@ -74,7 +73,6 @@ class PybulletRobotSetup(RobotSetup):
         frame = img[:, :, :]
         return frame
 
-####################################################################
 
     def load_cam(self, ee_position):
         pose = [ee_position[0][3], ee_position[1][3], ee_position[2][3]]
@@ -103,14 +101,12 @@ class PybulletRobotSetup(RobotSetup):
         print("Robot moved to initial state")
         for i in range(100):
             p.stepSimulation()
-####################################################################
 
     def get_joint_state(self, joint_name):
         joint_id = self.joint_names_to_ids[joint_name]
         joint_position, joint_vel, joint_force, torque = p.getJointState(
             self.robotID, joint_id)
         return joint_position, joint_vel, joint_force, torque
-####################################################################
 
     def getJointStates(self):
         jointids = self.get_control_joints()
@@ -119,7 +115,7 @@ class PybulletRobotSetup(RobotSetup):
         joint_velocities = [state[1] for state in joint_states]
         joint_torques = [state[3] for state in joint_states]
         return joint_positions, joint_velocities, joint_torques
-####################################################################
+
 
     def load_joints(self):
         for i in range(self.num_joints):
@@ -138,7 +134,6 @@ class PybulletRobotSetup(RobotSetup):
             self.joints[info.name] = info
             if jointType in {p.JOINT_PRISMATIC, p.JOINT_REVOLUTE}:
                 self.revolute_and_prismatic_joints.append(i)
-####################################################################
 
     def get_control_joints(self):
         joint_ids = []
@@ -150,7 +145,7 @@ class PybulletRobotSetup(RobotSetup):
         joint_ids.append(self.joint_names_to_ids["wrist_2_joint"])
         joint_ids.append(self.joint_names_to_ids["wrist_3_joint"])
         return joint_ids
-####################################################################
+
 
     def move_joints(self, joint_values, control_type = "velocity"):
         # joint_ids = self.get_control_joints()
@@ -175,7 +170,6 @@ class PybulletRobotSetup(RobotSetup):
 
         p.setJointMotorControlArray(self.robotID, indexes, controller, targetPositions,
                                     targetVelocities, positionGains=[0.05]*len(poses), forces=forces)
-####################################################################
 
     def handle_control_centering(self, velocity):
         id = self.joint_names_to_ids['7thjoint_prismatic']
@@ -184,7 +178,7 @@ class PybulletRobotSetup(RobotSetup):
         targetVelocities = velocity
         p.setJointMotorControl2(
             self.robotID, id, controller, targetPositions, targetVelocities)
-####################################################################
+
 
     def get_links(self):
 
@@ -192,13 +186,13 @@ class PybulletRobotSetup(RobotSetup):
             map(lambda linkInfo: linkInfo[1], p.getVisualShapeData(self.robotID)))
         linkNum = len(linkIDs)
         return linkNum
-####################################################################
+
 
     def convert_link_name(self, name):
         if isinstance(name, int):
             return name
         return self.joint_names_to_ids[name]
-####################################################################
+
 
     def get_link_kinematics(self, link_name_or_id, use_com_frame=False, as_matrix=False):
 
@@ -221,14 +215,12 @@ class PybulletRobotSetup(RobotSetup):
             return tf
         else:
             return position, orientation
-####################################################################
 
     def solve_end_effector_ik(self, link_name_or_id, target_position, target_orientation=None, threshold=None, max_iters=20):
 
         link_id = self.convert_link_name(link_name_or_id)
 
         return p.calculateInverseKinematics(self.robot.robotID, link_id, target_position[0:3])
-####################################################################
 
     def calc_jacobian(self, joint_pose):
         link_id = self.convert_link_name(self.end_effector_name)
@@ -245,7 +237,7 @@ class PybulletRobotSetup(RobotSetup):
                                                              computeForwardKinematics=1)
 
         return p.calculateJacobian(self.robotID, link_id, position_local, joint_pos, joint_vel, joint_acc)
-####################################################################
+
 
     def solveForwardVelocityKinematics(self, joint_vel):
         print('Forward velocity kinematics')
@@ -253,7 +245,6 @@ class PybulletRobotSetup(RobotSetup):
         J = self.calc_jacobian(joint_pos)
         eeVelocity = np.dot(J, joint_vel)
         return eeVelocity
-####################################################################
 
     def getInverseVelocityKinematics(self, end_eff_velocity):
         joint_pos, _, _ = self.getJointStates()
@@ -268,7 +259,6 @@ class PybulletRobotSetup(RobotSetup):
         else:
             joint_vel = np.dot(jacobian.T, end_eff_velocity)
         return joint_vel
-####################################################################
 
     def handle_control_velocity(self, velocity_x,velocity_z, direction):
         if direction == 'down':
@@ -279,7 +269,7 @@ class PybulletRobotSetup(RobotSetup):
         self.move_joints(joint_value_vel)
         return joint_value_vel
 
- #######################################################       
+        
 
     def move_end_effector_ik(self, link_name_or_id, target_position, target_orientation=None, threshold=0.005, retries=3):
         for _ in range(retries):
@@ -291,7 +281,6 @@ class PybulletRobotSetup(RobotSetup):
             if offset < threshold:
                 return True
         return False
-############################################################
 
     def __test__(self):
         self.reset()
@@ -299,7 +288,7 @@ class PybulletRobotSetup(RobotSetup):
             p.stepSimulation()
             self.get_rgb_image()
         p.stepSimulation()
-####################################################################
+
 
 class UR5RobotSetup(RobotSetup):
     def get_rgb_image(self):

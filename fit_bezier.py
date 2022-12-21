@@ -23,7 +23,8 @@ class Quad:
         self.depth_values = []
         self.radius_2d = radius
         self.current_time = []
-####################################################################
+
+
     def _orientation(self, v1, v2):
         """Set the orientation and ensure left-right or right-left
         @param v1 vertex 1 from branchpointdetection
@@ -46,7 +47,9 @@ class Quad:
                 p0 = v1
                 p2 = v2
         return p0, p2, ret_orientation
-####################################################################
+
+
+
     def pt_axis(self, t):
         """ Return a point along the bezier
         @param t in 0, 1
@@ -55,7 +58,8 @@ class Quad:
                        self.p1[i] + t ** 2 * self.p2[i] for i in range(0, 2)])
         return pts.transpose()
 
-####################################################################
+
+
     def diff_pt_axis(self, t):
         """ Return a point along the bezier
         @param t in 0, 1
@@ -65,7 +69,8 @@ class Quad:
         pts = dy
         return pts.transpose()
         # return self.p0 * (1-t) ** 2 + 2 * (1-t) * t * self.p1 + t ** 2 * self.p2
-####################################################################
+
+
     def tangent_slope(self, m_pt):
         # compute dy/dx
         t = m_pt
@@ -75,7 +80,8 @@ class Quad:
             4 * t[0] * self.p1[0] + t[0] * 2 * self.p2[0]
         slope = -dx_dt/dy_dt
         return slope
-####################################################################
+
+
     def tangent_curve_points(self, m_pt, scale=1):
         slope = self.tangent_slope(m_pt)
         x_a = int(m_pt[0]+scale)
@@ -83,7 +89,7 @@ class Quad:
         y_a = m_pt[1]+int(slope*(x_a-m_pt[0]))
         y_b = m_pt[1]+int(slope*(x_b-m_pt[0]))
         return [x_a, y_a], [x_b, y_b]
-####################################################################
+
     def _setup_least_squares(self, ts):
         """Setup the least squares approximation
         @param ts - t values to use
@@ -102,7 +108,6 @@ class Quad:
         for i, t in enumerate(ts_constraints):
             b_rhs[i, :] = self.pt_axis(ts_constraints[i])
         return a_constraints, b_rhs
-####################################################################
 
     def draw_quad(self, im, a, b):
         """ Set the pixels corresponding to the quad to white
@@ -125,7 +130,6 @@ class Quad:
         curve_mid_pt = pts[int(len(pts[0:-1])/2)]
         return image, curve_mid_pt, self.traj
 
- ####################################################################       
 
     def drawAxis(self, img,  p, q, colour, scale, w, h):
         angle = atan2(p[1] - q[1], p[0] - q[0])  # angle in radians
@@ -149,4 +153,3 @@ class Quad:
 
         return img
 
-###########---------- PCA ------------###############################
