@@ -24,8 +24,10 @@ class RobotSetup(ABC):
 class PybulletRobotSetup(RobotSetup):
     def __init__(self):
         self.serverMode = p.GUI  # GUI/DIRECT
-        self.robotUrdfPath = "/home/nidhi/masters_project/urdf/ur5_7thaxis.urdf"
-        self.tree = "/home/nidhi/masters_project/meshes/ufo_trees_labelled/1_l.ply"
+
+        root = os.path.dirname(os.path.realpath(__file__))
+        self.robotUrdfPath = os.path.join(root, 'urdf', 'ur5_7thaxis.urdf')
+        self.tree = os.path.join(root, 'meshes', 'ufo_trees_labelled', '1_l.ply')
         self.physicsClient = p.connect(self.serverMode)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -10)
@@ -216,7 +218,7 @@ class PybulletRobotSetup(RobotSetup):
 
         if as_matrix:
             tf = np.identity(4)
-            tf[:3, :3] = Rotation.from_quat(orientation).as_dcm()
+            tf[:3, :3] = Rotation.from_quat(orientation).as_matrix()
             tf[:3, 3] = position
             return tf
         else:
