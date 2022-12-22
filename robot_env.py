@@ -55,7 +55,10 @@ class PybulletRobotSetup(RobotSetup):
                                      "id", "name", "type", "lowerLimit", "upperLimit", "maxForce", "maxVelocity", "controllable"])
         self.load_joints()
         self.end_effector_name = "wrist_3_joint"
-        
+
+        self.current_step = 0
+        self.steps_per_second = 240  # Pybullet default
+        self.camera_freq = 20
         self.width = 424
         self.height = 240
         self.fov = 42  # changes to get the cutter in view
@@ -96,13 +99,27 @@ class PybulletRobotSetup(RobotSetup):
 ####################################################################
     def robot_step(self):
         p.stepSimulation()
+        self.current_step += 1
+
+    @property
+    def elapsed_time(self):
+        return self.current_step / self.steps_per_second
+
+    @property
+    def ee_pose(self):
+        return self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
+
+    @property
+    def ee_position(self):
+        return self.ee_pose[:3, 3]
 
     def reset(self):
         self.move_joints(self.home_joints, "position")
         print("----------------------------------------")
         print("Robot moved to initial state")
-        for i in range(100):
-            p.stepSimulation()
+        for _ in range(100):
+            self.robot_step()
+        self.current_step = 0
 
     def get_joint_state(self, joint_name):
         joint_id = self.joint_names_to_ids[joint_name]

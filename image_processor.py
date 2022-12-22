@@ -135,6 +135,8 @@ class HSVBasedImageProcessor(ImageProcessor):
                 print("------moved the scanned leader out of sight-------")
         else:
             if self.leader_on_right == True:
+
+                # TODO: We cannot be guaranteed that this value will ever be exactly 0! Fix this
                 if cnt_y - int(self.img_w/2) ==  0:
                     self.leader_centered = True
                     print("------centered! starting to follow the leader -------")
