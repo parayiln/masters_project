@@ -52,7 +52,7 @@ class RunFollowTheLeader():
         self.cmd_joint_vel_control = -.1
         self.bezier = [0., 0., 0.]
         self.end_effector_velocity = 0
-        self.direction = "none"
+        self.direction = 0
         self.error_integral = 0
         self.branch_no_to_scan = 2
         self.branch_lower_limit = 0.32
@@ -63,7 +63,7 @@ class RunFollowTheLeader():
         self.img_process = img_process
         self.tree_out_of_sight = False
         self.joint_pos_curr = 0
-        self.end_effector_velocity_z = 0.005
+        self.end_effector_velocity_z = 0.05
         self.bezier_world_x = []
         self.bezier_world_y = []
         self.ef_traj_x = []
@@ -97,7 +97,7 @@ class RunFollowTheLeader():
         self.joint_torque.append(joint_torque)
 
 
-    def update_after_one_branch(self):
+    def mark_branch_as_complete(self):
         self.img_process.leader_centered = False
         self.img_process.follow_leader = False
         self.img_process.no_of_branch_scaned = self.img_process.no_of_branch_scaned + 1
@@ -105,13 +105,13 @@ class RunFollowTheLeader():
         self.reset()
 
     
-    def get_follow_leader_velocity(self, img, ee_pos):
+    def update_follow_leader_velocity(self, img, ee_pos):
         mask = self.img_process.image_to_mask(img)
         midpt = self.img_process.mask_to_curve(mask, img)
         if midpt is None:
             self.tree_out_of_sight = True
             print("---- Tree out of sight  ------")
-            self.update_after_one_branch()
+            self.mark_branch_as_complete()
         else:
             self.end_effector_velocity, self.bezier = self.controller.get_pi_values(ee_pos, midpt, 1 / self.controller_freq)
 
@@ -120,41 +120,45 @@ class RunFollowTheLeader():
         mask = self.img_process.image_to_mask(img)
         z_pos = ee_pos[2]
         if z_pos < 0.4:
-            self.direction = "up"
+            self.direction = 1
         elif z_pos > .75:
-            self.direction = "down"
+            self.direction = -1
         self.img_process.mask_to_update_center_flags(mask, img)
         robot.handle_control_centering(self.cmd_joint_vel_control)
 
 
     def move_to_follow_leader(self, ee_pos):
-        euler_joint_vel = robot.handle_control_velocity(self.end_effector_velocity, self.end_effector_velocity_z,self.direction)
+
+        vel = np.array([self.end_effector_velocity, 0, self.end_effector_velocity_z * self.direction,
+                        0, 0, 0])
+        robot.handle_control_velocity(vel)
         joint_pos, joint_vel, joint_torque = robot.getJointStates()
         self.update_step_values(ee_pos, joint_pos, joint_vel, joint_torque)
         self.joint_pos_curr = joint_pos
 
         z_pos = ee_pos[2]
-        if (z_pos < self.branch_lower_limit and self.direction == "down") or (z_pos > self.branch_upper_limit and self.direction == "up"):
+        if (z_pos < self.branch_lower_limit and self.direction < 0) or (z_pos > self.branch_upper_limit and self.direction > 0):
             print("--- Finished scanning current branch moving to next --- ")
-            self.update_after_one_branch()
+            self.mark_branch_as_complete()
 
     def run(self):
 
-        time = robot.elapsed_time
-        update = math.floor(time * self.controller_freq) != math.floor(self.last_time * self.controller_freq)
+        cur_time = robot.elapsed_time
+        update = math.floor(cur_time * self.controller_freq) != math.floor(self.last_time * self.controller_freq)
         if update:
 
             img = robot.get_rgb_image()
             ee_pos = robot.ee_position
             if self.img_process.follow_leader:
-                self.get_follow_leader_velocity(img, ee_pos)
+                self.update_follow_leader_velocity(img, ee_pos)
+
             if not self.img_process.leader_centered:
                 self.move_to_center_leader(img, ee_pos)
             elif self.img_process.follow_leader:
                 self.move_to_follow_leader(ee_pos)
 
         robot.robot_step()
-        self.last_time = time
+        self.last_time = cur_time
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ class RobotSetup(ABC):
         pass
 
     @abstractmethod
-    def handle_control_velocity(self, velocity_x,velocity_z, direction):
+    def handle_control_velocity(self, velocity):
         pass
 
     def handle_control_centering(self, velocity):
@@ -279,12 +279,8 @@ class PybulletRobotSetup(RobotSetup):
             joint_vel = np.dot(jacobian.T, end_eff_velocity)
         return joint_vel
 
-    def handle_control_velocity(self, velocity_x,velocity_z, direction):
-        if direction == 'down':
-            end_eff_vel = np.array([velocity_x, 0, -velocity_z, 0, 0, 0])
-        elif direction == 'up':
-            end_eff_vel = np.array([velocity_x, 0, velocity_z, 0, 0, 0])
-        joint_value_vel = self.getInverseVelocityKinematics(end_eff_vel)
+    def handle_control_velocity(self, velocity):
+        joint_value_vel = self.getInverseVelocityKinematics(velocity)
         self.move_joints(joint_value_vel)
         return joint_value_vel
 
@@ -315,7 +311,7 @@ class UR5RobotSetup(RobotSetup):
         #TO DO 
         pass
 
-    def handle_control_velocity(self, velocity_x,velocity_z, direction):
+    def handle_control_velocity(self, velocity):
         pass
     def handle_control_centering(self, velocity):
         pass
