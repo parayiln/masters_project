@@ -1,25 +1,51 @@
 import os
 import pdb
-from turtle import color
-import pybullet as p
-import pybullet_data
 import numpy as np
 from scipy.spatial.transform import Rotation
 from collections import namedtuple
 from abc import ABC, abstractmethod
+try:
+    import pybullet as p
+    import pybullet_data
+except ModuleNotFoundError:
+    pass
+
+try:
+    import rospy
+    from geometry_msgs.msg import Vector3, Vector3Stamped
+    from sensor_msgs.msg import Image
+    from tf2_ros import TransformListener, Buffer
+    from ros_numpy import numpify
+except ModuleNotFoundError:
+    print('Could not load some ROS utilities')
 
 class RobotSetup(ABC):
     @abstractmethod
     def get_rgb_image(self):
-        pass
+        ...
 
     @abstractmethod
     def handle_control_velocity(self, velocity):
-        pass
+        ...
 
-    def handle_control_centering(self, velocity):
-        pass
+    @property
+    @abstractmethod
+    def ee_pose(self):
+        ...
 
+    @property
+    @abstractmethod
+    def ee_position(self):
+        ...
+
+    @property
+    def has_linear_axis(self):
+        return False
+
+    def handle_linear_axis_control(self):
+        if not self.has_linear_axis:
+            return
+        raise NotImplementedError()
 
 class PybulletRobotSetup(RobotSetup):
     def __init__(self):
@@ -65,6 +91,10 @@ class PybulletRobotSetup(RobotSetup):
         self.aspect = self.width / self.height
         self.near = 0.01
         self.far = .35
+
+    @property
+    def has_linear_axis(self):
+        return True
 
     def get_rgb_image(self):
         ee_position = self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
@@ -190,13 +220,12 @@ class PybulletRobotSetup(RobotSetup):
         p.setJointMotorControlArray(self.robotID, indexes, controller, targetPositions,
                                     targetVelocities, positionGains=[0.05]*len(poses), forces=forces)
 
-    def handle_control_centering(self, velocity):
+    def handle_linear_axis_control(self, target_vel):
         id = self.joint_names_to_ids['7thjoint_prismatic']
         controller = p.VELOCITY_CONTROL
-        targetPositions = 0
-        targetVelocities = velocity
+        target_pos = 0
         p.setJointMotorControl2(
-            self.robotID, id, controller, targetPositions, targetVelocities)
+            self.robotID, id, controller, target_pos, target_vel)
 
 
     def get_links(self):
@@ -306,15 +335,40 @@ class PybulletRobotSetup(RobotSetup):
 
 
 class UR5RobotSetup(RobotSetup):
+
+    def __init__(self, ee_frame='tool0'):
+
+        self.ee_frame = ee_frame
+
+        self.vel_pub = rospy.Publisher('vel_command', Vector3Stamped, queue_size=1)
+        self.img_sub = rospy.Publisher('rgb_image', Image, self.image_callback, queue_size=1)
+        self._last_image = None
+        self.buffer = Buffer()
+        TransformListener(self.buffer)
+
+    def image_callback(self, img_msg):
+        self._last_image = img_msg
+
     def get_rgb_image(self):
-        # get_from_realsense_stream()
-        #TO DO 
-        pass
+        if self._last_image is None:
+            return None
+        return numpify(self._last_image)
 
     def handle_control_velocity(self, velocity):
-        pass
-    def handle_control_centering(self, velocity):
-        pass
+        msg = Vector3Stamped()
+        msg.header.frame_id = self.ee_frame
+        msg.header.stamp = rospy.Time.now()
+        msg.vector = Vector3(*velocity[:3])
+        self.vel_pub.publish(msg)
+
+    @property
+    def ee_pose(self):
+        tf = self.buffer.lookup_transform('base_link', self.ee_frame, rospy.Time(), timeout=rospy.Duration(0.5)).transform
+        return numpify(tf)
+
+    @property
+    def ee_position(self):
+        return self.ee_pose[:3,3]
 
 
 if __name__ == "__main__":

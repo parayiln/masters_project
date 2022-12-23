@@ -124,7 +124,7 @@ class RunFollowTheLeader():
         elif z_pos > .75:
             self.direction = -1
         self.img_process.mask_to_update_center_flags(mask, img)
-        robot.handle_control_centering(self.cmd_joint_vel_control)
+        robot.handle_linear_axis_control(self.cmd_joint_vel_control)
 
 
     def move_to_follow_leader(self, ee_pos):
