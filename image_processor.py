@@ -1,5 +1,4 @@
-
-
+import os.path
 from ast import Pass
 import numpy as np
 import cv2 as cv
@@ -29,6 +28,22 @@ class ImageProcessor(ABC):
     def mask_to_update_center_flags(self, mask):
         pass
         
+
+class FlowGANImageProcessor(ImageProcessor):
+    def __init__(self, img_size):
+        from flowgan import FlowGAN
+        self.flowgan = FlowGAN(img_size, img_size, use_flow=True, gan_name='synthetic_flow_pix2pix',
+                               gan_input_channels=6, gan_output_channels=1)
+
+    def image_to_mask(self, img):
+        return self.flowgan.process(img)
+
+    def mask_to_curve(self, mask):
+        raise NotImplementedError
+
+    def mask_to_update_center_flags(self, mask):
+        raise NotImplementedError
+
 
 
 class HSVBasedImageProcessor(ImageProcessor):
@@ -148,3 +163,16 @@ class HSVBasedImageProcessor(ImageProcessor):
             cv.circle(img, (pca_center[0], pca_center[1]), 2, (255, 0, 255), -1)
         cv.line(img, (int(self.img_w/2), 0), (int(self.img_w/2), self.img_h), (255, 0, 0), 2)
         self.show_image(img, 'Camera input: centering',)    
+
+if __name__ == '__main__':
+
+    from PIL import Image
+    test_img_loc = os.path.join(os.path.expanduser('~'), 'test')
+    files = ['test_0.png', 'test_1.png']
+    imgs = [np.asanyarray(Image.open(os.path.join(test_img_loc, file))).astype(np.uint8)[:,:,:3] for file in files]
+    img_size = (imgs[0].shape[1], imgs[0].shape[0])
+    img_proc = FlowGANImageProcessor(img_size)
+
+    img_proc.image_to_mask(imgs[0])
+    mask = img_proc.image_to_mask(imgs[1])
+    Image.fromarray(mask).save(os.path.join(test_img_loc, 'mask.png'))
