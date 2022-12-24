@@ -12,6 +12,11 @@ from abc import ABC, abstractmethod
 class ImageProcessor(ABC):
     # input is the masked single leader only image
     #output is desired end effector pose in pixel coordinate
+
+    @abstractmethod
+    def process_image(self, img):
+        pass
+
     @abstractmethod
     def mask_to_curve(self, mask):
         pass
@@ -22,10 +27,23 @@ class ImageProcessor(ABC):
     def image_to_mask(self, img):
         pass
 
-    # input is the masked single leader only image  
-    #update flags reated to centering (is centered or not)
+    @property
     @abstractmethod
-    def mask_to_update_center_flags(self, mask):
+    def mask(self):
+        pass
+
+    @property
+    @abstractmethod
+    def curve(self):
+        pass
+
+    @property
+    @abstractmethod
+    def center(self):
+        pass
+
+    @abstractmethod
+    def get_center_distance(self, normalize=False):
         pass
         
 
@@ -50,38 +68,61 @@ class HSVBasedImageProcessor(ImageProcessor):
     def __init__(self):
         self.lower_red = np.array([60, 40, 40])
         self.upper_red = np.array([140, 255, 255])
-        self.iter = 3
-        self.pixel = 100
-        self.cropped_height = 0
-        self.curr_target = 0
+        self.img_divisions = 3
         self.leader_centered = False
-        self.follow_leader = False
-        self.first_scan = True
-        self.leader_on_right = False
-        self.move_curr_branch = False
-        self.no_of_branch_scaned = 0
-        self.thres_out_of_sight =220 
+
+        self._last_img = None
+        self._last_mask = None
+        self._last_curve = None
+        self._last_center = None
+        self._last_contours = None
+        self._last_contour_centers = None
+
+    @property
+    def mask(self):
+        return self._last_mask
+
+    @property
+    def center(self):
+        return self._last_center
+
+    @property
+    def curve(self):
+        return self._last_curve
+
+    def process_image(self, img):
+        mask = self.image_to_mask(img)
+        curve = self.mask_to_curve(mask)
+        if curve is not None:
+            branch_center = self.find_branch_center_pixel(mask)
+        else:
+            branch_center = None
+
+        self._last_center = branch_center
+        self._last_curve = curve
+        self._last_img = img
+        self._last_mask = mask
+
 
     def image_to_mask(self, image):
-        hsv =cv.cvtColor(image, cv.COLOR_BGR2HSV)
+        hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
         mask = cv.inRange(hsv, self.lower_red, self.upper_red)
-        self.img_w = image.shape[1]
-        self.img_h = image.shape[0]
         return mask
 
     # divide the image to 3 parts (fit a curve using 3 points)
-    def divide_mask(self,step, mask, img):
-        self.crop_h = int(self.img_h/self.iter)
-        self.cropped_height = 0 + self.crop_h * step
-        cropped_image = img[self.cropped_height:self.cropped_height +
-                                 self.pixel, 0:img.shape[1]]
-        bw = mask[self.cropped_height:self.cropped_height +
-                             self.pixel, 0:img.shape[1]]
-        return cropped_image, bw
+    def divide_mask(self, step, mask):
 
-    def get_contour_centers(self, bw, img):
-        contours, hera = cv.findContours(
-            bw, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        height = mask.shape[0]
+        crop_start = int(height * (step / self.img_divisions))
+        crop_end = int(height * ((step + 1) / self.img_divisions))
+        return mask[crop_start:crop_end]
+
+
+    def get_contour_centers(self, mask, y_offset=0):
+        contours, hera = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None, None
+
         contour_center = [0,0]
         for c in contours:
             M = cv.moments(c)
@@ -92,77 +133,88 @@ class HSVBasedImageProcessor(ImageProcessor):
                 cX = 0
                 cY = 0
             
-            contour_center = [cX,cY+self.cropped_height]
-            
+            contour_center = [cX, cY + y_offset]
         return contour_center, contours
 
-    def get_pca_of_contours(self, contours, img):
-        for i, c in enumerate(contours):
-            area = cv.contourArea(c)
+    def get_pca_of_contours(self, contours):
+
+        for i, contour in enumerate(contours):
+
+            area = cv.contourArea(contour)
             if area < 1e2 or 1e5 < area:
                 continue
-            sz = len(c)
+            sz = len(contour)
             data_pts = np.empty((sz, 2), dtype=np.float64)
             for i in range(data_pts.shape[0]):
-                data_pts[i, 0] = c[i, 0, 0]
-                data_pts[i, 1] = c[i, 0, 1]
+                data_pts[i, 0] = contour[i, 0, 0]
+                data_pts[i, 1] = contour[i, 0, 1]
             mean = np.empty((0))
             mean, eigenvectors = cv.PCACompute(data_pts, mean)
-            center = (int(mean[0, 0])+0, int(mean[0, 1])+self.cropped_height)
+            center = (int(mean[0, 0])+0, int(mean[0, 1]))
             return center
 
+    def mask_to_curve(self, mask):
+        contour_centers = []
 
-    def mask_to_curve(self,mask,img):
-        contour_centers=[]
-        for i in range(self.iter):
-            img_crop, bw = self.divide_mask(i,mask, img)
-            contour_center, _ = self.get_contour_centers(bw, img_crop)
-            contour_centers.append(contour_center)
-        self.quad = fit_bezier.Quad(contour_centers[0], contour_centers[2], 10, contour_centers[1])
-        img_bezier, m_pt, traj = self.quad.draw_quad(img, contour_centers[0], contour_centers[2])
-        cv.circle(img_bezier, (int(m_pt[0]), int(m_pt[1])), 2, (0, 0, 255), -1)
-        cv.line(img_bezier, (int(self.img_w/2), 0), (int(self.img_w/2), self.img_h), (0, 0, 0), 2)
-        for i in range(self.iter):
-            cv.circle(img_bezier, (contour_centers[i][0], contour_centers[i][1]), 2, (255, 255, 255), -1)
-        self.show_image(img_bezier, 'Camera input: Bezier curve')
-        return m_pt
-    
-    def check_leader_on_right(self, y, center_y):
-        if y - center_y > 0:
-            self.leader_on_right = False
+        for idx in range(self.img_divisions):
+            submask = self.divide_mask(idx, mask)
+            offset = (idx * mask.shape[0]) // self.img_divisions
+            contour_center, _ = self.get_contour_centers(submask, y_offset=offset)
+            if contour_center is None:
+                self._last_contour_centers = None
+                return None
+            else:
+                contour_centers.append(contour_center)
+
+        curve = fit_bezier.Quad(contour_centers[0], contour_centers[2], 10, contour_centers[1])
+        self._last_contour_centers = contour_centers
+        return curve
+
+    def visualize(self):
+
+        if self._last_img is None:
+            return
+
+        img = self._last_img.copy()
+        h, w = img.shape[:2]
+
+        contour_centers = self._last_contour_centers
+        if contour_centers is not None:
+            img_bezier, m_pt, traj = self._last_curve.draw_quad(img, contour_centers[0], contour_centers[2])
+            cv.circle(img_bezier, (int(m_pt[0]), int(m_pt[1])), 2, (0, 0, 255), -1)
+            cv.line(img_bezier, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+            for idx in range(self.img_divisions):
+                cv.circle(img_bezier, (contour_centers[idx][0], contour_centers[idx][1]), 2, (255, 255, 255), -1)
         else:
-            self.leader_on_right = True
-    
+            img_bezier = img
+        self.show_image(img_bezier, 'Camera input: Bezier curve')
+
+
     def show_image(self, image, title):
         cv.imshow(title, image)
         cv.waitKey(1)
 
-    def mask_to_update_center_flags(self, mask, img):
-        self.cropped_height =0
-        contour_center, contours = self.get_contour_centers(mask, img)
-        pca_center = self.get_pca_of_contours(contours, img)
-        self.check_leader_on_right(contour_center[0], int(self.img_w/2))
-        cnt_y = contour_center[0]
-        if self.move_curr_branch == True:
-            # print("moving scanned branch", cnt_y)
-            if cnt_y - int(self.thres_out_of_sight) < 0:
-                self.move_curr_branch = False
-                print("------moved the scanned leader out of sight-------")
-        else:
-            if self.leader_on_right == True:
+    def get_center_distance(self, normalize=False):
 
-                # TODO: We cannot be guaranteed that this value will ever be exactly 0! Fix this
-                if cnt_y - int(self.img_w/2) ==  0:
-                    self.leader_centered = True
-                    print("------centered! starting to follow the leader -------")
-                    self.follow_leader = True
-                else:
-                    self.leader_centered = False
-        cv.circle(img, (contour_center[0], contour_center[1]), 2, (255, 255, 255), -1)
-        if pca_center is not None:
-            cv.circle(img, (pca_center[0], pca_center[1]), 2, (255, 0, 255), -1)
-        cv.line(img, (int(self.img_w/2), 0), (int(self.img_w/2), self.img_h), (255, 0, 0), 2)
-        self.show_image(img, 'Camera input: centering',)    
+        if self._last_center is None:
+            return None
+
+        dist = self._last_center - self.mask.shape[1] / 2
+        if normalize:
+            # Normalizes distance to a number between -1 and 1
+            dist = dist / (self.mask.shape[1] / 2)
+
+        return dist
+
+    def find_branch_center_pixel(self, mask):
+        contour_center, contours = self.get_contour_centers(mask)
+        self._last_contours = (contour_center, contours)
+        pca_center = self.get_pca_of_contours(contours)
+        if not contours or pca_center is None:
+            return None
+
+        return pca_center[0]
+
 
 if __name__ == '__main__':
 

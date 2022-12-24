@@ -42,7 +42,7 @@ class RobotSetup(ABC):
     def has_linear_axis(self):
         return False
 
-    def handle_linear_axis_control(self):
+    def handle_linear_axis_control(self, target_vel):
         if not self.has_linear_axis:
             return
         raise NotImplementedError()
