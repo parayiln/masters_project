@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import sys
-sys.path.append("/home/nidhi/masters_project")
 # import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
 import math
 from enum import Enum
@@ -60,19 +58,20 @@ class PIController():
 
 class FollowTheLeaderController():
 
-    def __init__(self, robot, controller, img_process):
+    def __init__(self, robot, controller, img_process, visualize=False):
 
         # Environment
         self.robot = robot
         self.controller = controller
         self.img_process = img_process
+        self.visualize = visualize
 
         # Scanning behavior setup
         self.branch_no_to_scan = 2
         self.post_scan_move_dist = 0.10
         self.branch_lower_limit = 0.32
         self.branch_upper_limit = 0.84
-        # self.controller_freq = 20 #HSV
+        # self.controller_freq = 20 #HSV            # Set to 0 if you want the controller to run every iteration
         self.controller_freq = 10   #flownet
         self.ini_joint_pos_control = .54
         self.cmd_joint_vel_control = -.1
@@ -98,7 +97,7 @@ class FollowTheLeaderController():
 
         self.cur_img = self.robot.get_rgb_image()
 
-        robot.reset()
+        self.robot.reset()
 
 
     def reset(self):
@@ -125,15 +124,15 @@ class FollowTheLeaderController():
             self.num_branches_scanned += 1
         self.reset()
 
-    def compute_velocity_from_curve(self, curve, ee_pos, execute=True):
+    def compute_velocity_from_curve(self, curve, ee_pos, time_elapsed, execute=True):
         if curve is None:
             return None
 
         midpoint = curve.pt_axis(0.5)
-        vel, self.bezier = self.controller.get_pi_values(ee_pos, midpoint, 1 / self.controller_freq)
+        vel, self.bezier = self.controller.get_pi_values(ee_pos, midpoint, time_elapsed)
         if execute:
             vel_array = np.array([vel, 0, self.vertical_scan_velocity * self.direction, 0, 0, 0])
-            robot.handle_control_velocity(vel_array)
+            self.robot.handle_control_velocity(vel_array)
         return vel
 
     def leader_follow_is_done(self):
@@ -148,10 +147,12 @@ class FollowTheLeaderController():
 
     def step(self):
         if self.needs_update():
-            self.update_state_machine()
-
-        robot.robot_step()
-        self.img_process.visualize()
+            print('ROBOT UPDATING')
+            time_elapsed = self.update_image()
+            self.update_state_machine(time_elapsed)
+        self.robot.robot_step()
+        if self.visualize:
+            self.img_process.visualize()
 
     def needs_update(self):
         cur_time = self.robot.elapsed_time
@@ -159,12 +160,15 @@ class FollowTheLeaderController():
         self.last_time = cur_time
         return update
 
-    def update_state_machine(self):
+    def update_image(self):
+        img = self.robot.get_rgb_image()
+        self.img_process.process_image(img)
+        return 1 / self.controller_freq
+
+    def update_state_machine(self, time_elapsed):
 
         start_state = self.state
-        img = self.robot.get_rgb_image()
         ee_pos = self.robot.ee_position
-        self.img_process.process_image(img)
 
         # STATE MACHINE TRANSITION LOGIC
         if self.state == StateMachine.START:
@@ -190,10 +194,10 @@ class FollowTheLeaderController():
         elif self.state == StateMachine.LEADER_FOLLOW:
 
             curve = self.img_process.curve
-            self.compute_velocity_from_curve(curve, ee_pos, execute=True)
+            self.compute_velocity_from_curve(curve, ee_pos, time_elapsed, execute=True)
             if self.leader_follow_is_done():
                 self.mark_branch_as_complete(success=curve is not None)
-                robot.handle_control_velocity(np.zeros(6))
+                self.robot.handle_control_velocity(np.zeros(6))
 
                 if self.num_branches_scanned >= self.branch_no_to_scan:
                     self.state = StateMachine.DONE
@@ -220,7 +224,7 @@ if __name__ == "__main__":
     imgprocess = FlowGANImageProcessor()
     # imgprocess = HSVBasedImageProcessor()
     robot = PybulletRobotSetup()
-    state_machine = FollowTheLeaderController(robot, picontroller, imgprocess)
+    state_machine = FollowTheLeaderController(robot, picontroller, imgprocess, visualize=True)
 
     while True:
         state_machine.step()
