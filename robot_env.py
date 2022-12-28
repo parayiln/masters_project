@@ -10,14 +10,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-try:
-    import rospy
-    from geometry_msgs.msg import Vector3, Vector3Stamped
-    from sensor_msgs.msg import Image
-    from tf2_ros import TransformListener, Buffer
-    from ros_numpy import numpify
-except ModuleNotFoundError:
-    print('Could not load some ROS utilities')
+
 
 class RobotSetup(ABC):
     @abstractmethod
@@ -99,7 +92,7 @@ class PybulletRobotSetup(RobotSetup):
     def get_rgb_image(self):
         ee_position = self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
         rgb_raw = self.load_cam(ee_position)
-        img = self.read_cam_video(rgb_raw)
+        img = self.read_cam_video(rgb_raw)[:,:,:3]
         return img
 ####################################################################
 
@@ -334,41 +327,7 @@ class PybulletRobotSetup(RobotSetup):
         p.stepSimulation()
 
 
-class UR5RobotSetup(RobotSetup):
 
-    def __init__(self, ee_frame='tool0'):
-
-        self.ee_frame = ee_frame
-
-        self.vel_pub = rospy.Publisher('vel_command', Vector3Stamped, queue_size=1)
-        self.img_sub = rospy.Publisher('rgb_image', Image, self.image_callback, queue_size=1)
-        self._last_image = None
-        self.buffer = Buffer()
-        TransformListener(self.buffer)
-
-    def image_callback(self, img_msg):
-        self._last_image = img_msg
-
-    def get_rgb_image(self):
-        if self._last_image is None:
-            return None
-        return numpify(self._last_image)
-
-    def handle_control_velocity(self, velocity):
-        msg = Vector3Stamped()
-        msg.header.frame_id = self.ee_frame
-        msg.header.stamp = rospy.Time.now()
-        msg.vector = Vector3(*velocity[:3])
-        self.vel_pub.publish(msg)
-
-    @property
-    def ee_pose(self):
-        tf = self.buffer.lookup_transform('base_link', self.ee_frame, rospy.Time(), timeout=rospy.Duration(0.5)).transform
-        return numpify(tf)
-
-    @property
-    def ee_position(self):
-        return self.ee_pose[:3,3]
 
 
 if __name__ == "__main__":

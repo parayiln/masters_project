@@ -58,7 +58,7 @@ class PIController():
 
 
 
-class RunFollowTheLeader():
+class FollowTheLeaderController():
 
     def __init__(self, robot, controller, img_process):
 
@@ -146,68 +146,71 @@ class RunFollowTheLeader():
             return True
         return False
 
-
-    def run(self):
-        cur_time = self.robot.elapsed_time
-        update = math.floor(cur_time * self.controller_freq) != math.floor(self.last_time * self.controller_freq)
-        if update:
-
-            start_state = self.state
-            self.pre_img = self.cur_img
-            img = self.robot.get_rgb_image()
-            self.cur_img = img
-            ee_pos = self.robot.ee_position
-            self.img_process.process_image(img, self.pre_img)
-
-            # STATE MACHINE TRANSITION LOGIC
-            if self.state == StateMachine.START:
-                if self.robot.has_linear_axis:
-                    self.state = StateMachine.SCANNING
-                else:
-                    self.direction = -1
-                    self.state = StateMachine.LEADER_FOLLOW
-
-            elif self.state == StateMachine.SCANNING:
-
-                center_dist = self.img_process.get_center_distance(normalize=False)
-                if center_dist is not None and -10 < center_dist < 10:
-                    # TODO: More robust switching criterion - Especially when it has just gotten done scanning a leader
-                    self.robot.handle_linear_axis_control(0)
-                    dist_from_lower = abs(ee_pos[2] - self.branch_lower_limit)
-                    dist_from_upper = abs(ee_pos[2] - self.branch_upper_limit)
-                    self.direction = 1 if dist_from_lower < dist_from_upper else -1
-                    self.state = StateMachine.LEADER_FOLLOW
-                else:
-                    self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
-
-            elif self.state == StateMachine.LEADER_FOLLOW:
-
-                curve = self.img_process.curve
-                self.compute_velocity_from_curve(curve, ee_pos, execute=True)
-                if self.leader_follow_is_done():
-                    self.mark_branch_as_complete(success=curve is not None)
-                    robot.handle_control_velocity(np.zeros(6))
-
-                    if self.num_branches_scanned >= self.branch_no_to_scan:
-                        self.state = StateMachine.DONE
-                    elif self.robot.has_linear_axis:
-                        self.state = StateMachine.SCANNING_MOVE_AWAY
-                        self.last_finished_scan_pos = ee_pos
-                    else:
-                        self.state = StateMachine.DONE
-
-            elif self.state == StateMachine.SCANNING_MOVE_AWAY:
-                if np.linalg.norm(self.last_finished_scan_pos - ee_pos) > self.post_scan_move_dist:
-                    self.state = StateMachine.SCANNING
-                else:
-                    self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
-
-            if self.state != start_state:
-                print('STATE SWITCHED FROM {} to {}'.format(start_state, self.state))
+    def step(self):
+        if self.needs_update():
+            self.update_state_machine()
 
         robot.robot_step()
         self.img_process.visualize()
+
+    def needs_update(self):
+        cur_time = self.robot.elapsed_time
+        update = math.floor(cur_time * self.controller_freq) != math.floor(self.last_time * self.controller_freq)
         self.last_time = cur_time
+        return update
+
+    def update_state_machine(self):
+
+        start_state = self.state
+        img = self.robot.get_rgb_image()
+        ee_pos = self.robot.ee_position
+        self.img_process.process_image(img)
+
+        # STATE MACHINE TRANSITION LOGIC
+        if self.state == StateMachine.START:
+            if self.robot.has_linear_axis:
+                self.state = StateMachine.SCANNING
+            else:
+                self.direction = -1
+                self.state = StateMachine.LEADER_FOLLOW
+
+        elif self.state == StateMachine.SCANNING:
+
+            center_dist = self.img_process.get_center_distance(normalize=False)
+            if center_dist is not None and -10 < center_dist < 10:
+                # TODO: More robust switching criterion - Especially when it has just gotten done scanning a leader
+                self.robot.handle_linear_axis_control(0)
+                dist_from_lower = abs(ee_pos[2] - self.branch_lower_limit)
+                dist_from_upper = abs(ee_pos[2] - self.branch_upper_limit)
+                self.direction = 1 if dist_from_lower < dist_from_upper else -1
+                self.state = StateMachine.LEADER_FOLLOW
+            else:
+                self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
+
+        elif self.state == StateMachine.LEADER_FOLLOW:
+
+            curve = self.img_process.curve
+            self.compute_velocity_from_curve(curve, ee_pos, execute=True)
+            if self.leader_follow_is_done():
+                self.mark_branch_as_complete(success=curve is not None)
+                robot.handle_control_velocity(np.zeros(6))
+
+                if self.num_branches_scanned >= self.branch_no_to_scan:
+                    self.state = StateMachine.DONE
+                elif self.robot.has_linear_axis:
+                    self.state = StateMachine.SCANNING_MOVE_AWAY
+                    self.last_finished_scan_pos = ee_pos
+                else:
+                    self.state = StateMachine.DONE
+
+        elif self.state == StateMachine.SCANNING_MOVE_AWAY:
+            if np.linalg.norm(self.last_finished_scan_pos - ee_pos) > self.post_scan_move_dist:
+                self.state = StateMachine.SCANNING
+            else:
+                self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
+
+        if self.state != start_state:
+            print('STATE SWITCHED FROM {} to {}'.format(start_state, self.state))
 
 
 if __name__ == "__main__":
@@ -217,10 +220,10 @@ if __name__ == "__main__":
     imgprocess = FlowGANImageProcessor()
     # imgprocess = HSVBasedImageProcessor()
     robot = PybulletRobotSetup()
-    state_machine = RunFollowTheLeader(robot, picontroller, imgprocess)
+    state_machine = FollowTheLeaderController(robot, picontroller, imgprocess)
 
     while True:
-        state_machine.run()
+        state_machine.step()
         if state_machine.state == StateMachine.DONE:
             break
 

@@ -10,6 +10,7 @@
 import numpy as np
 from glob import glob
 import csv
+import os
 import cv2
 import json
 from os.path import exists
@@ -47,6 +48,10 @@ class LeaderDetector:
 
         self.path_debug = "./DebugImages/"
         path_calculated = "./CalculatedData/"
+        for path in [self.path_debug, path_calculated]:
+            if not os.path.exists(path):
+                os.mkdir(path)
+
         image_name  = "0"
         self.name = image_name
         # Read in all images that have name_ and are not debugging images

@@ -82,17 +82,12 @@ class FlowGANImageProcessor(ImageProcessor):
         cv.imshow(title, image)
         cv.waitKey(1)
 
-    def image_to_mask(self, img, img_pre):
-        img_0 = np.asanyarray(img).astype(np.uint8)[:,:,:3]
-        img_1 = np.asanyarray(img_pre).astype(np.uint8)[:,:,:3]
-        self.flowgan.process(img_0)
-        mask = self.flowgan.process(img_1)
-        flow = self.flowgan.last_flow
-        # self.show_image(mask, 'Flow mask')
-        return mask, img_0, img_1, flow
-    
+    def image_to_mask(self, img):
+        img = np.asanyarray(img).astype(np.uint8)[:,:,:3]
+        mask = self.flowgan.process(img)
+        return mask
 
-    def get_image_dict(self, mask, rgb0, rgb1, flow):
+    def get_image_dict(self, img, mask):
         """ Read in all of the mask, rgb, flow images
         If Edge image does not exist, create it
         @param image_name: image number/name as a string
@@ -100,20 +95,23 @@ class FlowGANImageProcessor(ImageProcessor):
 
         images = {}
         images["Mask"] = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
-        images["RGB0"] = rgb0
-        images["RGB1"] = rgb1
-        images["Flow"] = flow
+        images["RGB0"] = img
+        images["RGB1"] = self._last_img
+        images["Flow"] = self.flowgan.last_flow
         images["Edge"] = None
-      
 
         im_gray = cv.cvtColor(images["RGB0"], cv.COLOR_BGR2GRAY)
         images["Edge"] = cv.Canny(im_gray, 50, 150, apertureSize=3)
         return images
     
-    def process_image(self, img, pre_img):
-        mask, rgb0, rgb1, flow = self.image_to_mask(img, pre_img)
-        images = self.get_image_dict(mask, rgb0, rgb1, flow)
-        curve, m_pt = self.mask_to_curve(images)
+    def process_image(self, img):
+        mask = self.image_to_mask(img)
+        if self._last_img is None:
+            self._last_img = img
+            return
+
+        image_dict = self.get_image_dict(img, mask)
+        curve, m_pt = self.mask_to_curve(image_dict)
         # if curve is not None:
         branch_center = m_pt
         #     pass
@@ -141,10 +139,10 @@ class FlowGANImageProcessor(ImageProcessor):
 
         img = self._last_img.copy()
         h, w = img.shape[:2]
-        img_bezier = img
-        cv.line(img_bezier, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
-        cv.circle(img_bezier, (int(self._last_center[0]),int(self._last_center[1])), 2, (0, 0, 255), -1)
-        self.show_image(img_bezier, 'Camera input: Bezier curve mpt')
+        if self._last_center is not None:
+            cv.line(img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+            cv.circle(img, (int(self._last_center[0]),int(self._last_center[1])), 2, (0, 0, 255), -1)
+        self.show_image(img, 'Camera input: Bezier curve mpt')
 
 
     def show_image(self, image, title):
@@ -236,7 +234,7 @@ class HSVBasedImageProcessor(ImageProcessor):
     def curve(self):
         return self._last_curve
 
-    def process_image(self, img, img_):
+    def process_image(self, img):
         mask = self.image_to_mask(img)
         curve = self.mask_to_curve(mask)
         if curve is not None:
