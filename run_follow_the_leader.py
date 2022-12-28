@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import sys
 sys.path.append("/home/nidhi/masters_project")
-import pandas as pd
+# import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -20,8 +20,14 @@ class PIController():
         self.cam_offset = -.05
         self.end_effector_to_tree = .322
         self.tree_location = -.6
-        self.kp = 1.25
-        self.ki = 0.05
+        ## values for HSV
+        # self.kp = 1.25
+        # self.ki = 0.05
+        # self.error_integral = 0
+
+        #values for flownet
+        self.kp = 0.00125
+        self.ki = 0.00005
         self.error_integral = 0
 
     def get_pi_values(self, ee_pos, desired_pt, time_step):
@@ -66,7 +72,8 @@ class RunFollowTheLeader():
         self.post_scan_move_dist = 0.10
         self.branch_lower_limit = 0.32
         self.branch_upper_limit = 0.84
-        self.controller_freq = 20
+        # self.controller_freq = 20 #HSV
+        self.controller_freq = 10   #flownet
         self.ini_joint_pos_control = .54
         self.cmd_joint_vel_control = -.1
         self.vertical_scan_velocity = 0.05
@@ -88,6 +95,8 @@ class RunFollowTheLeader():
         self.joint_velocity = []
         self.joint_position = []
         self.joint_torque = []
+
+        self.cur_img = self.robot.get_rgb_image()
 
         robot.reset()
 
@@ -139,16 +148,16 @@ class RunFollowTheLeader():
 
 
     def run(self):
-
         cur_time = self.robot.elapsed_time
         update = math.floor(cur_time * self.controller_freq) != math.floor(self.last_time * self.controller_freq)
         if update:
 
             start_state = self.state
-
+            self.pre_img = self.cur_img
             img = self.robot.get_rgb_image()
+            self.cur_img = img
             ee_pos = self.robot.ee_position
-            self.img_process.process_image(img)
+            self.img_process.process_image(img, self.pre_img)
 
             # STATE MACHINE TRANSITION LOGIC
             if self.state == StateMachine.START:
@@ -203,9 +212,10 @@ class RunFollowTheLeader():
 
 if __name__ == "__main__":
     from robot_env import PybulletRobotSetup
-    from image_processor import HSVBasedImageProcessor
+    from image_processor import FlowGANImageProcessor, HSVBasedImageProcessor
     picontroller = PIController()
-    imgprocess = HSVBasedImageProcessor()
+    imgprocess = FlowGANImageProcessor()
+    # imgprocess = HSVBasedImageProcessor()
     robot = PybulletRobotSetup()
     state_machine = RunFollowTheLeader(robot, picontroller, imgprocess)
 
@@ -215,5 +225,5 @@ if __name__ == "__main__":
             break
 
     print("----Done Scanning -----")
-    data = np.asarray([state_machine.bezier_world_x,state_machine.bezier_world_y,state_machine.ef_traj_x,state_machine.ef_traj_y])
-    pd.DataFrame(data).to_csv('results/traj_hsv.csv')
+    # data = np.asarray([state_machine.bezier_world_x,state_machine.bezier_world_y,state_machine.ef_traj_x,state_machine.ef_traj_y])
+    # pd.DataFrame(data).to_csv('results/traj_hsv.csv')

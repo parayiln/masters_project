@@ -7,7 +7,7 @@ import argparse
 import torch
 from time import time
 
-install_path = os.path.join(os.path.expanduser('~'), 'repos')
+install_path = os.path.join(os.path.expanduser('~'), '/home/nidhi/repos_followLeader')
 sys.path.append(install_path)
 
 from flownet2pytorch.models import FlowNet2
@@ -39,7 +39,7 @@ class FlowNetWrapper:
             # Testing stuff
             torch.cuda.synchronize()
             end = time()
-            print(f'Processing time: {end-start:.2f}s')
+            # print(f'Processing time: {end-start:.2f}s')
             output = output[0].cpu()
             output = output.numpy()
             output = np.transpose(output, (1,2,0))

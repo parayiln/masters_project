@@ -90,7 +90,7 @@ class PybulletRobotSetup(RobotSetup):
         self.fov = 42  # changes to get the cutter in view
         self.aspect = self.width / self.height
         self.near = 0.01
-        self.far = .35
+        self.far = 10
 
     @property
     def has_linear_axis(self):

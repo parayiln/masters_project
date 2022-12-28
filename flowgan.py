@@ -14,14 +14,15 @@ class FlowGAN:
         self.input_size = input_size        # Should be W x H
         self.output_size = output_size      # Should be W x H
         self.flownet_resize = None
-
+        
         self.last_img = None
         self.last_flow = None
 
         self.flownet = None
         if use_flow:
             from wrappers.flownet import FlowNetWrapper
-            self.flownet = FlowNetWrapper(cuda=True, weight_path=os.path.join(os.path.expanduser('~'), 'weights', 'FlowNet2_checkpoint.pth.tar'))
+            self.flownet = FlowNetWrapper(cuda=True, weight_path=os.path.join(os.path.expanduser('~'), '/home/nidhi/repos_followLeader', 'FlowNet2_checkpoint.pth.tar'))
+            # print(tuple((np.array([input_size[1], input_size[0]]) // 64) * 64))
             self.flownet_resize = Resize(tuple((np.array([input_size[1], input_size[0]]) // 64) * 64), antialias=True)
 
         self.gan = None
@@ -65,6 +66,7 @@ class FlowGAN:
             raise NotImplementedError()
 
         # Convert back into Numpy image
+
         return seg
 
 
@@ -85,8 +87,8 @@ if __name__ == '__main__':
         runtimes.append(end-start)
 
     avg = np.array(runtimes).mean()
-    print('Average runtime {:.5f}s'.format(avg))
-    print('(FPS: {:.2f})'.format(1/avg))
+    # print('Average runtime {:.5f}s'.format(avg))
+    # print('(FPS: {:.2f})'.format(1/avg))
 
 
     # from PIL import Image

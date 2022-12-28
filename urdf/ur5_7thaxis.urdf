@@ -28,9 +28,32 @@
   <!-- link lengths used in model -->
   <!-- manually measured -->
   <link name="world"/>
+    <link name="tree_1">
+      <visual>
+        <origin xyz="-0.35 2 -.5" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/1.stl" scale=".1 .1 .1"/>
+        </geometry>
+        <material name="brown">
+          <color rgba=".58 .3 0 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="-1 2 -.4" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/1.stl" scale=".1 .1 .1"/>
+        </geometry>
+      </collision>
+    </link>
 
 
-    <link name="trees">
+    <joint name="world_tree1_fixed_joint" type="fixed">
+      <parent link="world" />
+      <child link="tree_1"/>
+      <origin xyz="0 0 0" rpy="0.0 0.0 0.0"/>
+    </joint>
+
+    <link name="tree_0">
       <visual>
         <origin xyz="-0.35 .6 -.5" rpy="0 0 0"/>
         <geometry>
@@ -43,15 +66,15 @@
       <collision>
         <origin xyz="-1 2 -.4" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/2.stl" scale=".1 .1 .1"/>
+          <mesh filename="package://masters_project/meshes/ufo_trees_labelled/0.stl" scale=".1 .1 .1"/>
         </geometry>
       </collision>
     </link>
 
 
-    <joint name="world_tree_fixed_joint" type="fixed">
+    <joint name="world_tree0_fixed_joint" type="fixed">
       <parent link="world" />
-      <child link="trees"/>
+      <child link="tree_0"/>
       <origin xyz="0 0 0" rpy="0.0 0.0 0.0"/>
     </joint>
 
