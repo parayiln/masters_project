@@ -89,9 +89,11 @@ class PybulletRobotSetup(RobotSetup):
     def has_linear_axis(self):
         return True
 
+    def get_camera_pose(self):
+        return self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
+
     def get_rgb_image(self):
-        ee_position = self.get_link_kinematics('wrist_3_link-tool0_fixed_joint', as_matrix=True)
-        rgb_raw = self.load_cam(ee_position)
+        rgb_raw = self.load_cam()
         img = self.read_cam_video(rgb_raw)[:,:,:3]
         return img
 ####################################################################
@@ -102,11 +104,13 @@ class PybulletRobotSetup(RobotSetup):
         return frame
 
 
-    def load_cam(self, ee_position):
-        pose = [ee_position[0][3], ee_position[1][3], ee_position[2][3]]
-        pose_target = np.dot(ee_position, np.array([0, 0, .3, 1]))[:3]
+    def load_cam(self):
+
+        camera_pose = self.get_camera_pose()
+        position = camera_pose[:3, 3]
+        target_pt = camera_pose.dot(np.array([0, 0, 1.0, 1]))[:3]
         self.view_matrix = np.reshape(p.computeViewMatrix(
-            cameraEyePosition=pose, cameraTargetPosition=pose_target, cameraUpVector=[0, 0, 1]), (4, 4))
+            cameraEyePosition=position, cameraTargetPosition=target_pt, cameraUpVector=[0, 0, 1]), (4, 4))
         self.projection_matrix = p.computeProjectionMatrixFOV(
             self.fov, self.aspect, self.near, self.far)
         _, _, rgb_img, raw_depth_img, raw_seg_img = p.getCameraImage(width=self.width,
@@ -301,8 +305,18 @@ class PybulletRobotSetup(RobotSetup):
             joint_vel = np.dot(jacobian.T, end_eff_velocity)
         return joint_vel
 
-    def handle_control_velocity(self, velocity):
-        joint_value_vel = self.getInverseVelocityKinematics(velocity)
+    def handle_control_velocity(self, vel):
+
+        # Velocities should be expressed in the frame of the camera!
+        if np.any(vel[3:]):
+            raise NotImplementedError("Currently have not implemented transformation matrices for rotation")
+
+        # Hacky - can be done better
+        # End effector frame is not coincident with the typical convention of camera frame where X -> right, Y -> down
+        # This hack fixes it
+        adjust_rot = np.array([[0,1,0],[-1,0,0],[0,0,1]])
+        vel_ee = self.get_camera_pose()[:3,:3] @ adjust_rot @ vel[:3]
+        joint_value_vel = self.getInverseVelocityKinematics(np.array([*vel_ee, 0, 0, 0]))
         self.move_joints(joint_value_vel)
         return joint_value_vel
 

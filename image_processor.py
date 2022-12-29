@@ -39,24 +39,13 @@ class ImageProcessor(ABC):
     def curve(self):
         pass
 
-    @property
-    @abstractmethod
-    def center(self):
-        pass
-
-    @abstractmethod
-    def get_center_distance(self, normalize=False):
-        pass
-        
 
 class FlowGANImageProcessor(ImageProcessor):
-    def __init__(self):
-        self.img_size = (424,240)
+    def __init__(self, img_size):
+        self.img_size = img_size
         from flowgan import FlowGAN
         self.flowgan = FlowGAN(self.img_size, self.img_size, use_flow=True, gan_name='synthetic_flow_pix2pix',
                                gan_input_channels=6, gan_output_channels=1)
-
-
 
         self._last_img = None
         self._last_mask = None
@@ -64,7 +53,6 @@ class FlowGANImageProcessor(ImageProcessor):
         self._last_center = None
         self._last_contours = None
         self._last_contour_centers = None
-        self.img_divisions = 3
 
     @property
     def mask(self):
@@ -111,103 +99,43 @@ class FlowGANImageProcessor(ImageProcessor):
             return
 
         image_dict = self.get_image_dict(img, mask)
-        curve, m_pt = self.mask_to_curve(image_dict)
-        # if curve is not None:
-        branch_center = m_pt
-        #     pass
-        # else:
-        #     branch_center = None
-        #     pass
+        curve = self.mask_to_curve(image_dict)
 
-        
-        self._last_center = branch_center
         self._last_curve = curve
         self._last_img = img
         self._last_mask = mask
 
     def mask_to_curve(self, images):
-        from  LeaderDetector import LeaderDetector
+        from LeaderDetector import LeaderDetector
         leader_detect = LeaderDetector(images, b_output_debug=True, b_recalc=True)
-        curve = Quad([0, 0], [1,1], 1)
-        curve_mpt = leader_detect.bezier_mpt
-        return curve, curve_mpt
+        # TODO: This seems to have potentially weird behavior if multiple leaders are detected?
+        if not leader_detect.vertical_leader_quads:
+            return None
+        return leader_detect.vertical_leader_quads[-1]
 
-    def visualize(self):
+    def visualize(self, target=None, arrows=None, title='Output'):
 
         if self._last_img is None:
             return
 
+        if arrows is None:
+            arrows = []
+
         img = self._last_img.copy()
         h, w = img.shape[:2]
-        if self._last_center is not None:
-            cv.line(img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
-            cv.circle(img, (int(self._last_center[0]),int(self._last_center[1])), 2, (0, 0, 255), -1)
-        self.show_image(img, 'Camera input: Bezier curve mpt')
 
+        # Draw diagnostics for centering
+        cv.line(img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+        cv.line(img, (0, h // 2), (w, h // 2), (0, 0, 0), 2)
+        cv.circle(img, (w // 2, h // 2), 2, (0, 255, 0), -1)
+        if target is not None:
+            cv.circle(img, (int(target[0]),int(target[1])), 2, (0, 0, 255), -1)
 
-    def show_image(self, image, title):
-        cv.imshow(title, image)
+        for start, end, color in arrows:
+            cv.arrowedLine(img, start, end, color, 3)
+
+        cv.imshow(title, img)
         cv.waitKey(1)
-
-    def get_center_distance(self, normalize=False):
-
-        if self._last_center is None:
-            return None
-
-        dist = self._last_center[0] - self.mask.shape[1] / 2
-        if normalize:
-            # Normalizes distance to a number between -1 and 1
-            dist = dist / (self.mask.shape[1] / 2)
-
-        return dist
-
-    def find_branch_center_pixel(self, mask):
-        contour_center, contours = self.get_contour_centers(mask)
-        self._last_contours = (contour_center, contours)
-        pca_center = self.get_pca_of_contours(contours)
-        if not contours or pca_center is None:
-            return None
-
-        return pca_center[0]
-
-    def get_contour_centers(self, mask, y_offset=0):
-        contours, hera = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None, None
-
-        contour_center = [0,0]
-        for c in contours:
-            M = cv.moments(c)
-            if M["m00"] != 0:
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-            else:
-                cX = 0
-                cY = 0
-            
-            contour_center = [cX, cY + y_offset]
-        cv.drawContours(mask, contours, -1, (0, 255, 0), 3)
-        self.show_image(mask, ' mask')
-        return contour_center, contours
-
-
-
-    def get_pca_of_contours(self, contours):
-
-        for i, contour in enumerate(contours):
-
-            area = cv.contourArea(contour)
-            if area < 1e2 or 1e5 < area:
-                continue
-            sz = len(contour)
-            data_pts = np.empty((sz, 2), dtype=np.float64)
-            for i in range(data_pts.shape[0]):
-                data_pts[i, 0] = contour[i, 0, 0]
-                data_pts[i, 1] = contour[i, 0, 1]
-            mean = np.empty((0))
-            mean, eigenvectors = cv.PCACompute(data_pts, mean)
-            center = (int(mean[0, 0])+0, int(mean[0, 1]))
-            return center
 
 
 class HSVBasedImageProcessor(ImageProcessor):

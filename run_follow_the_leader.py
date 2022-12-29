@@ -54,6 +54,29 @@ class PIController():
         #     [[point_ef[0], point_ef[1], point_ef[2]]], [[0, 0, 1]], 4)
         return [point[0][3], point[1][3], point[2][3]]
 
+    def reset(self):
+        self.error_integral = 0
+
+class PixelBasedPIController:
+    def __init__(self, camera_fov, pix_width, kp=1.0, ki=0.0):
+        self.fov = camera_fov   # Horizontal FOV
+        self.width = pix_width
+        self.kp = kp
+        self.ki = ki
+
+        self._integral_error = 0.0
+
+    def reset(self):
+        self._integral_error = 0.0
+
+    def get_pi_values(self, target_px, time_step):
+        # Error is normalized to the FOV of the camera to make sure that different
+        # image resolutions don't cause the controller to behave differently
+        pix_err = target_px[0] - self.width / 2
+        normalized_err = self.fov * pix_err / self.width
+        self._integral_error += normalized_err * time_step
+        correction = self.kp * normalized_err + self.ki * self._integral_error
+        return correction
 
 
 class FollowTheLeaderController():
@@ -75,7 +98,7 @@ class FollowTheLeaderController():
         self.controller_freq = 10   #flownet
         self.ini_joint_pos_control = .54
         self.cmd_joint_vel_control = -.1
-        self.vertical_scan_velocity = 0.05
+        self.scan_velocity = 0.05
 
         # State variables
         self.state = StateMachine.START
@@ -83,6 +106,8 @@ class FollowTheLeaderController():
         self.num_branches_scanned = 0
         self.last_finished_scan_pos = None
         self.last_time = 0.0
+        self.current_target = None
+        self.viz_arrows = []
 
         # Logging variables
         self.error_integral = 0
@@ -124,15 +149,48 @@ class FollowTheLeaderController():
             self.num_branches_scanned += 1
         self.reset()
 
-    def compute_velocity_from_curve(self, curve, ee_pos, time_elapsed, execute=True):
+    def get_pixel_target_from_curve(self, curve, eval_pts=50):
+
         if curve is None:
+            return None, None
+
+        ts = np.linspace(0, 1, num=eval_pts)
+        eval_pts = curve.pt_axis(ts)
+        closest_idx = np.argmin(np.abs(eval_pts[:, 1] - self.robot.height / 2))
+        target_pt = eval_pts[closest_idx]
+        self.current_target = target_pt
+        return target_pt, ts[closest_idx]
+
+    def compute_velocity_from_curve(self, curve, ee_pos, time_elapsed, execute=True):
+        target_pt, t = self.get_pixel_target_from_curve(curve)
+        if target_pt is None:
             return None
 
-        midpoint = curve.pt_axis(0.5)
-        vel, self.bezier = self.controller.get_pi_values(ee_pos, midpoint, time_elapsed)
+        gradient = curve.tangent_axis(t)
+        gradient /= np.linalg.norm(gradient)
+
+        # Flip the sign of the gradient if the gradient is in the opposite direction of the scan direction
+        # Note that positive gradient means moving down whereas positive direction means moving up, hence the ==
+        if np.sign(gradient[1]) == self.direction:
+            gradient *= -1
+        vel = gradient * self.scan_velocity
+        correction_term = self.controller.get_pi_values(target_pt, time_elapsed)
+        vel[0] += correction_term
+        vel *= self.scan_velocity / np.linalg.norm(vel)
+
         if execute:
-            vel_array = np.array([vel, 0, self.vertical_scan_velocity * self.direction, 0, 0, 0])
+            vel_array = np.array([vel[0], vel[1], 0, 0, 0, 0])
             self.robot.handle_control_velocity(vel_array)
+
+        # Visualization stuff
+        vel_norm = vel / np.linalg.norm(vel)
+        vl = 50
+        self.viz_arrows = [
+            [target_pt.astype(np.int), (target_pt + gradient * vl).astype(np.int), (0, 255, 0)],
+            [target_pt.astype(np.int), (target_pt + np.array([(correction_term / self.scan_velocity), 0]) * vl).astype(np.int), (0, 0, 255)],
+            [target_pt.astype(np.int), (target_pt + vel_norm * vl).astype(np.int), (0, 255, 255)],
+        ]
+
         return vel
 
     def leader_follow_is_done(self):
@@ -152,7 +210,7 @@ class FollowTheLeaderController():
             self.update_state_machine(time_elapsed)
         self.robot.robot_step()
         if self.visualize:
-            self.img_process.visualize()
+            self.img_process.visualize(self.current_target, self.viz_arrows)
 
     def needs_update(self):
         cur_time = self.robot.elapsed_time
@@ -180,8 +238,8 @@ class FollowTheLeaderController():
 
         elif self.state == StateMachine.SCANNING:
 
-            center_dist = self.img_process.get_center_distance(normalize=False)
-            if center_dist is not None and -10 < center_dist < 10:
+            target, _ = self.get_pixel_target_from_curve(self.img_process.curve)
+            if target is not None and -10 < target[0] - self.robot.width // 2 < 10:
                 # TODO: More robust switching criterion - Especially when it has just gotten done scanning a leader
                 self.robot.handle_linear_axis_control(0)
                 dist_from_lower = abs(ee_pos[2] - self.branch_lower_limit)
@@ -198,6 +256,8 @@ class FollowTheLeaderController():
             if self.leader_follow_is_done():
                 self.mark_branch_as_complete(success=curve is not None)
                 self.robot.handle_control_velocity(np.zeros(6))
+                self.controller.reset()
+                self.viz_arrows = []
 
                 if self.num_branches_scanned >= self.branch_no_to_scan:
                     self.state = StateMachine.DONE
@@ -220,11 +280,14 @@ class FollowTheLeaderController():
 if __name__ == "__main__":
     from robot_env import PybulletRobotSetup
     from image_processor import FlowGANImageProcessor, HSVBasedImageProcessor
-    picontroller = PIController()
-    imgprocess = FlowGANImageProcessor()
+    # picontroller = PIController()
     # imgprocess = HSVBasedImageProcessor()
     robot = PybulletRobotSetup()
-    state_machine = FollowTheLeaderController(robot, picontroller, imgprocess, visualize=True)
+    img_processor = FlowGANImageProcessor((robot.width, robot.height))
+
+    kp = 0.8
+    pi_controller = PixelBasedPIController(np.radians(robot.fov), robot.width, kp=kp)
+    state_machine = FollowTheLeaderController(robot, pi_controller, img_processor, visualize=True)
 
     while True:
         state_machine.step()
