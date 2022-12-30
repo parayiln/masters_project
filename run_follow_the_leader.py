@@ -12,6 +12,7 @@ class StateMachine(Enum):
     LEADER_FOLLOW = 2
     DONE = 3
     SCANNING_MOVE_AWAY = 4
+    INACTIVE = 5
 
 class PIController():
     def __init__(self):
@@ -186,9 +187,9 @@ class FollowTheLeaderController():
         vel_norm = vel / np.linalg.norm(vel)
         vl = 50
         self.viz_arrows = [
-            [target_pt.astype(np.int), (target_pt + gradient * vl).astype(np.int), (0, 255, 0)],
-            [target_pt.astype(np.int), (target_pt + np.array([(correction_term / self.scan_velocity), 0]) * vl).astype(np.int), (0, 0, 255)],
-            [target_pt.astype(np.int), (target_pt + vel_norm * vl).astype(np.int), (0, 255, 255)],
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + gradient * vl).astype(np.int64)), (0, 255, 0)],
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + np.array([(correction_term / self.scan_velocity), 0]) * vl).astype(np.int64)), (0, 0, 255)],
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + vel_norm * vl).astype(np.int64)), (0, 255, 255)],
         ]
 
         return vel
@@ -223,6 +224,23 @@ class FollowTheLeaderController():
         self.img_process.process_image(img)
         return 1 / self.controller_freq
 
+    def switch_to_leader_follow(self):
+        self.state = StateMachine.LEADER_FOLLOW
+
+    def deactivate_leader_follow(self):
+        self.robot.handle_control_velocity(np.zeros(6))
+        self.controller.reset()
+        self.viz_arrows = []
+
+        if self.num_branches_scanned >= self.branch_no_to_scan:
+            self.state = StateMachine.DONE
+        elif self.robot.has_linear_axis:
+            self.state = StateMachine.SCANNING_MOVE_AWAY
+            self.last_finished_scan_pos = self.robot.ee_position
+        else:
+            self.state = StateMachine.DONE
+
+
     def update_state_machine(self, time_elapsed):
 
         start_state = self.state
@@ -234,7 +252,7 @@ class FollowTheLeaderController():
                 self.state = StateMachine.SCANNING
             else:
                 self.direction = -1
-                self.state = StateMachine.LEADER_FOLLOW
+                self.switch_to_leader_follow()
 
         elif self.state == StateMachine.SCANNING:
 
@@ -245,7 +263,7 @@ class FollowTheLeaderController():
                 dist_from_lower = abs(ee_pos[2] - self.branch_lower_limit)
                 dist_from_upper = abs(ee_pos[2] - self.branch_upper_limit)
                 self.direction = 1 if dist_from_lower < dist_from_upper else -1
-                self.state = StateMachine.LEADER_FOLLOW
+                self.switch_to_leader_follow()
             else:
                 self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
 
@@ -255,17 +273,7 @@ class FollowTheLeaderController():
             self.compute_velocity_from_curve(curve, ee_pos, time_elapsed, execute=True)
             if self.leader_follow_is_done():
                 self.mark_branch_as_complete(success=curve is not None)
-                self.robot.handle_control_velocity(np.zeros(6))
-                self.controller.reset()
-                self.viz_arrows = []
-
-                if self.num_branches_scanned >= self.branch_no_to_scan:
-                    self.state = StateMachine.DONE
-                elif self.robot.has_linear_axis:
-                    self.state = StateMachine.SCANNING_MOVE_AWAY
-                    self.last_finished_scan_pos = ee_pos
-                else:
-                    self.state = StateMachine.DONE
+                self.deactivate_leader_follow()
 
         elif self.state == StateMachine.SCANNING_MOVE_AWAY:
             if np.linalg.norm(self.last_finished_scan_pos - ee_pos) > self.post_scan_move_dist:
