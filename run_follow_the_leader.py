@@ -88,7 +88,7 @@ class FollowTheLeaderController():
         self.robot = robot
         self.controller = controller
         self.img_process = img_process
-        self.visualize = visualize
+        self.do_visualize = visualize
 
         # Scanning behavior setup
         self.branch_no_to_scan = 2
@@ -96,10 +96,9 @@ class FollowTheLeaderController():
         self.branch_lower_limit = 0.32
         self.branch_upper_limit = 0.84
         # self.controller_freq = 20 #HSV            # Set to 0 if you want the controller to run every iteration
-        self.controller_freq = 10   #flownet
-        self.ini_joint_pos_control = .54
+        self.controller_freq = 5   #flownet
         self.cmd_joint_vel_control = -.1
-        self.scan_velocity = 0.05
+        self.scan_velocity = 0.025
 
         # State variables
         self.state = StateMachine.START
@@ -210,8 +209,8 @@ class FollowTheLeaderController():
             time_elapsed = self.update_image()
             self.update_state_machine(time_elapsed)
         self.robot.robot_step()
-        if self.visualize:
-            self.img_process.visualize(self.current_target, self.viz_arrows)
+        if self.do_visualize:
+            self.visualize()
 
     def needs_update(self):
         cur_time = self.robot.elapsed_time
@@ -240,6 +239,8 @@ class FollowTheLeaderController():
         else:
             self.state = StateMachine.DONE
 
+    def visualize(self):
+        self.img_process.visualize(self.current_target, self.viz_arrows)
 
     def update_state_machine(self, time_elapsed):
 

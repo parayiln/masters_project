@@ -6,7 +6,7 @@ import rospy
 from geometry_msgs.msg import Vector3, Vector3Stamped
 from sensor_msgs.msg import Image, CameraInfo
 from tf2_ros import TransformListener, Buffer
-from ros_numpy import numpify
+from ros_numpy import numpify, msgify
 from robot_env import RobotSetup
 from run_follow_the_leader import FollowTheLeaderController, PixelBasedPIController, StateMachine
 from image_processor import FlowGANImageProcessor
@@ -16,6 +16,8 @@ import subprocess as sp
 import shlex
 from arm_utils.srv import HandleJointPlan
 from sensor_msgs.msg import JointState
+import cv2 as cv
+from PIL import Image as PILImage
 
 class ROSFollowTheLeaderController(FollowTheLeaderController):
     def __init__(self, *args, **kwargs):
@@ -29,11 +31,13 @@ class ROSFollowTheLeaderController(FollowTheLeaderController):
         self.state = StateMachine.INACTIVE
 
         self.scan_start_pos = None
-        self.scan_vertical_dist = 0.2
+        self.scan_vertical_dist = 0.35
+        self.scan_velocity = 0.10
 
         rospy.Service('activate_leader_follow', Empty, self.switch_to_leader_follow)
         self.servo_activate = rospy.ServiceProxy('servo_activate', Empty)
         self.servo_stop = rospy.ServiceProxy('servo_stop', Empty)
+        self.diagnostic_pub = rospy.Publisher('diagnostic_img', Image, queue_size=1)
 
     def needs_update(self):
         current_update = self.robot.last_image_update()
@@ -56,20 +60,15 @@ class ROSFollowTheLeaderController(FollowTheLeaderController):
         self.last_update = cur_image_stamp
         return elapsed
 
-    # def compute_velocity_from_curve(self, curve, ee_pos, time_elapsed, execute=True):
-    #     # TEMP
-    #     vel = np.array([0, 0.025, 0, 0, 0, 0])
-    #     if execute:
-    #         self.robot.handle_control_velocity(vel)
-    #     return np.array([0, 0.025])
-
     def switch_to_leader_follow(self, *_):
         if self.state == StateMachine.LEADER_FOLLOW:
             rospy.logwarn('The system is already in leader following mode! Not doing anything...')
             return []
 
+        self.robot.move_to_home_position()
         self.direction = -1
         self.scan_start_pos = self.robot.ee_position
+        self.scan_velocity = rospy.get_param('scan_velocity', self.scan_velocity)
 
         self.servo_activate()
         if self.bag_folder is not None and self.bag_topics:
@@ -93,6 +92,35 @@ class ROSFollowTheLeaderController(FollowTheLeaderController):
 
         self.scan_start_pos = None
 
+    def visualize(self):
+
+        if self.img_process.mask is None:
+            return
+
+        img = self.img_process.image
+        flow = self.img_process.flow
+        mask = self.img_process.mask
+
+        diag = (0.5 * img + 0.5 * mask).astype(np.uint8)
+        arrows = self.viz_arrows
+        if arrows is None:
+            arrows = []
+        h, w = diag.shape[:2]
+        cv.line(diag, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+        cv.line(diag, (0, h // 2), (w, h // 2), (0, 0, 0), 2)
+        cv.circle(diag, (w // 2, h // 2), 2, (0, 255, 0), -1)
+        if self.current_target is not None:
+            cv.circle(diag, (int(self.current_target[0]),int(self.current_target[1])), 2, (0, 0, 255), -1)
+        for start, end, color in arrows:
+            cv.arrowedLine(diag, start, end, color, 3)
+
+        final_img = np.zeros((2*h, 2*w, 3), dtype=np.uint8)
+        final_img[:h,:w] = img
+        final_img[h:2*h,:w] = np.array(PILImage.fromarray(flow).resize((w,h))).astype(np.uint8)
+        final_img[:h,w:2*w] = mask
+        final_img[h:2*h,w:2*w] = diag
+
+        self.diagnostic_pub.publish(msgify(Image, final_img, 'rgb8'))
 
 
 class UR5RobotSetup(RobotSetup):
@@ -166,7 +194,7 @@ class UR5RobotSetup(RobotSetup):
         pass
 
     def move_to_home_position(self, *_):
-        home_joints = [0.75, -1.12, 0.60, -2.62, -1.71, 0]
+        home_joints = [0.75, -1.68, 1.23, -2.70, -1.54, 0]
         joints = JointState()
         joints.position = home_joints
         self.plan_joint_srv(joints, True)
@@ -177,19 +205,23 @@ class UR5RobotSetup(RobotSetup):
 if __name__ == '__main__':
 
     bag_folder = os.path.join(os.path.expanduser('~'), 'data', 'follow_the_leader')
-    bag_topics = ['/camera/color/image_raw_throttled']
+
+    im_topic = '/camera/color/image_raw_throttled'
+    cam_topic = '/camera/color/camera_info'
+
+    bag_topics = [im_topic, cam_topic, 'tool_pose', 'vel_command', 'diagnostic_img']
 
     rospy.init_node('follow_the_leader_node')
     env = UR5RobotSetup(dummy_mode=False)
     pi_controller = PixelBasedPIController(env.fov, env.width, kp=0.8)
     image_processor = FlowGANImageProcessor((env.width, env.height))
     state_machine = ROSFollowTheLeaderController(env, pi_controller, img_process=image_processor,
-                                                 bag_folder=bag_folder, bag_topics=bag_topics)
+                                                 bag_folder=bag_folder, bag_topics=bag_topics, visualize=True)
 
     rospy.on_shutdown(state_machine.deactivate_leader_follow)
     rospy.sleep(0.5)
 
-    rospy.loginfo('Follow the leader controller has been initialized!')
+    rospy.loginfo('Follow the leader controller has been initialized!\nCall service activate_leader_follow to activate')
 
     while not rospy.is_shutdown():
         state_machine.step()

@@ -59,6 +59,14 @@ class FlowGANImageProcessor(ImageProcessor):
         return self._last_mask
 
     @property
+    def image(self):
+        return self._last_img
+
+    @property
+    def flow(self):
+        return self.flowgan.last_flow
+
+    @property
     def center(self):
         return self._last_center
 
