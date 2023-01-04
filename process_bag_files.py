@@ -6,8 +6,9 @@ import os
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Pose, Point, Quaternion
 import matplotlib.pyplot as plt
+from PIL import Image as PILImage
 
-def process_bag(file, output_file=None):
+def process_bag(file, output_file=None, annotations_folder=None):
     assert file.endswith('.bag')
     bag = rosbag.Bag(file)
 
@@ -17,9 +18,18 @@ def process_bag(file, output_file=None):
     num_imgs = info['/camera/color/image_raw_throttled'].message_count
     hz = num_imgs / (end - start)
 
+    # Annotation stuff
+    annotations_index = []
+    if annotations_folder is not None:
+        imgs_to_annotate = 15
+        annotations_index = np.linspace(0.20 * num_imgs, num_imgs - 1, num=imgs_to_annotate).astype(np.int32)
+
     pose_info = []
     queued_diagnostic_img = None
     video_writer = None
+    img_idx = 0
+    annotated_imgs = 0
+
     if output_file is None:
         output_file = file.replace('.bag', '.avi')
     try:
@@ -37,6 +47,14 @@ def process_bag(file, output_file=None):
 
                 final_img = np.concatenate([img, queued_diagnostic_img], axis=1)
                 video_writer.write(final_img)
+
+                if img_idx in annotations_index:
+                    mod_img = img.copy()
+                    cv2.line(mod_img, (0, img.shape[0] // 2), (img.shape[1], img.shape[0] // 2), (0, 0, 0), 2)
+                    PILImage.fromarray(mod_img).save(os.path.join(annotations_folder, f'{annotated_imgs}.png'))
+                    annotated_imgs += 1
+
+                img_idx += 1
 
 
             elif topic == 'diagnostic_img':
@@ -128,12 +146,15 @@ if __name__ == '__main__':
         for cat, file in group.items():
             input_path = os.path.join(base_folder, file)
             output_path = os.path.join(base_folder, 'outputs', f'{i+1}_{cat}.avi')
-            output_pos = process_bag(input_path, output_path)
+            annotations_folder = os.path.join(base_folder, 'annotation', f'{i+1}_{cat}')
+            if not os.path.exists(annotations_folder):
+                os.mkdir(annotations_folder)
+            output_pos = process_bag(input_path, output_path, annotations_folder)
             output_pos = np.array(output_pos)[:,:2]
             output_pos[:,1] *= -1
 
-            plt.plot(output_pos[:,0], output_pos[:,1], label=cat_map[cat], **mpl_settings[cat])
-
-        plt.legend()
-        plt.axis('equal')
-        plt.show()
+        #     plt.plot(output_pos[:,0], output_pos[:,1], label=cat_map[cat], **mpl_settings[cat])
+        #
+        # plt.legend()
+        # plt.axis('equal')
+        # plt.show()
