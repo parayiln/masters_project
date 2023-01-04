@@ -46,17 +46,29 @@ class PybulletRobotSetup(RobotSetup):
 
         root = os.path.dirname(os.path.realpath(__file__))
         self.robotUrdfPath = os.path.join(root, 'urdf', 'ur5_7thaxis.urdf')
+        self.orchardUrdfPath = os.path.join(root, 'urdf', 'orchard.urdf')
         self.tree = os.path.join(root, 'meshes', 'ufo_trees_labelled', '1_l.ply')
         self.physicsClient = p.connect(self.serverMode)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -10)
-        self.planeID = p.loadURDF("plane.urdf")
-        self.robotStartPos = [0, 0, 0]
+        # self.planeID = p.loadURDF("plane.urdf")
+        #Tree6:  3, 2.3(2 trees), 1.75(2ish trees too close), 1.2 (one tree with side branches outward)
+        #Tree5: .6,-.05
+        # Tree4: -.5, -1.6, -2 (Good)
+        # Tree3: -2.4 (2 tree, missed too close first one), -3.4, -3.6
+        # tree2: -4.45(2 trees are too small),-5.5(second branch is too close),-5.9(2 trees)
+        # Tree1 : branches too close
+        # tree0 :
+        self.robotStartPos = [-8.5, -0.2,0]
         self.robotStartOrn = p.getQuaternionFromEuler([0, 0, 0])
+        self.orchardStartPos = [0, 0, -.5]
+        self.orchardStartOrn = p.getQuaternionFromEuler([0, 0, 0])
         print("----------------------------------------")
         print("Loading robot from {}".format(self.robotUrdfPath))
         self.robotID = p.loadURDF(self.robotUrdfPath, self.robotStartPos,
                                   self.robotStartOrn, flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
+        self.orchardID = p.loadURDF(self.orchardUrdfPath, self.orchardStartPos,
+                                  self.orchardStartOrn, flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
 
         self.tf = np.identity(4)
         self.home_joints = [.543, -1.588, -1.2689, -1.08, 2.303, -1.67, 4.69]

@@ -106,6 +106,13 @@ class FlowGANImageProcessor(ImageProcessor):
         self._last_mask = mask
 
     def mask_to_curve(self, images):
+
+        # for key in images:
+        #     h = images[key].shape[0]
+        #     w = images[key].shape[1]
+        #     images[key] = images[key][0:h,int(0):int(300)]
+        #     self.show_image(images[key],"debug")
+            # images[image] = images[image][w/2-100:w/2+100, 0:h]
         from LeaderDetector import LeaderDetector
         leader_detect = LeaderDetector(images, b_output_debug=True, b_recalc=True)
         # TODO: This seems to have potentially weird behavior if multiple leaders are detected?
@@ -131,8 +138,8 @@ class FlowGANImageProcessor(ImageProcessor):
         if target is not None:
             cv.circle(img, (int(target[0]),int(target[1])), 2, (0, 0, 255), -1)
 
-        for start, end, color in arrows:
-            cv.arrowedLine(img, start, end, color, 3)
+        # for start, end, color in arrows:
+        #     cv.arrowedLine(img, start, end, color, 3)
 
         cv.imshow(title, img)
         cv.waitKey(1)

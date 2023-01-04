@@ -94,7 +94,7 @@ class FollowTheLeaderController():
         self.branch_no_to_scan = 2
         self.post_scan_move_dist = 0.10
         self.branch_lower_limit = 0.32
-        self.branch_upper_limit = 0.84
+        self.branch_upper_limit = .8
         # self.controller_freq = 20 #HSV            # Set to 0 if you want the controller to run every iteration
         self.controller_freq = 10   #flownet
         self.ini_joint_pos_control = .54
@@ -195,10 +195,11 @@ class FollowTheLeaderController():
         return vel
 
     def leader_follow_is_done(self):
-        if self.img_process.curve is None:
-            return True
+        # if self.img_process.curve is None:
+        #     return True
         ee_pos = self.robot.ee_position
         z_pos = ee_pos[2]
+        
         if (z_pos < self.branch_lower_limit and self.direction < 0) or (
                 z_pos > self.branch_upper_limit and self.direction > 0):
             return True
@@ -206,7 +207,7 @@ class FollowTheLeaderController():
 
     def step(self):
         if self.needs_update():
-            print('ROBOT UPDATING')
+            # print('ROBOT UPDATING')
             time_elapsed = self.update_image()
             self.update_state_machine(time_elapsed)
         self.robot.robot_step()
@@ -266,12 +267,13 @@ class FollowTheLeaderController():
                 self.switch_to_leader_follow()
             else:
                 self.robot.handle_linear_axis_control(self.cmd_joint_vel_control)
-
+        
         elif self.state == StateMachine.LEADER_FOLLOW:
 
             curve = self.img_process.curve
             self.compute_velocity_from_curve(curve, ee_pos, time_elapsed, execute=True)
             if self.leader_follow_is_done():
+                print("this should not be the case")
                 self.mark_branch_as_complete(success=curve is not None)
                 self.deactivate_leader_follow()
 
