@@ -152,7 +152,9 @@ class FlowGANImageProcessor(ImageProcessor):
             ts = np.linspace(0, 1, num=101)
             eval_pts = quad.pt_axis(ts)
             closest_idx = np.argmin(np.abs(eval_pts[:, 1] - images['RGB0'].shape[0] / 2))
-            target_pt = eval_pts[closest_idx]
+            target_pt = eval_pts[closest_idx].copy()
+            clamp_point(target_pt, (0, self.img_size[0] - 1), (0, self.img_size[1] - 1))
+
             gradient = quad.tangent_axis(ts[closest_idx])
             gradient /= np.linalg.norm(gradient)
 
@@ -358,6 +360,15 @@ class HSVBasedImageProcessor(ImageProcessor):
 
         return pca_center[0]
 
+def clamp_point(pt, *ranges):
+    assert len(pt) == len(ranges)
+    for i, (low, up) in enumerate(ranges):
+        val = pt[i]
+        if val < low:
+            val = low
+        if val > up:
+            val = up
+        pt[i] = val
 
 if __name__ == '__main__':
 
