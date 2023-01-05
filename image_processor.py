@@ -39,6 +39,9 @@ class ImageProcessor(ABC):
     def curve(self):
         pass
 
+    def reset(self):
+        pass
+
 
 class FlowGANImageProcessor(ImageProcessor):
     def __init__(self, img_size):
@@ -47,12 +50,26 @@ class FlowGANImageProcessor(ImageProcessor):
         self.flowgan = FlowGAN(self.img_size, self.img_size, use_flow=True, gan_name='synthetic_flow_pix2pix',
                                gan_input_channels=6, gan_output_channels=1)
 
+        # State variables for mask tracking
+        # This really shouldn't be part of this class, but oh well...
+        self.target_jump_rejection = 40
+        self.last_center_guess = None
+        self.last_vector_guess = None
+        self.selected_idx = None
+        self.following_mode = False
+
+
+        self._last_detection = None
         self._last_img = None
         self._last_mask = None
         self._last_curve = None
         self._last_center = None
-        self._last_contours = None
-        self._last_contour_centers = None
+
+    def reset(self):
+        self.last_center_guess = None
+        self.last_vector_guess = None
+        self.selected_idx = None
+        self.following_mode = False
 
     @property
     def mask(self):
@@ -99,7 +116,11 @@ class FlowGANImageProcessor(ImageProcessor):
         im_gray = cv.cvtColor(images["RGB0"], cv.COLOR_BGR2GRAY)
         images["Edge"] = cv.Canny(im_gray, 50, 150, apertureSize=3)
         return images
-    
+
+    def set_following_mode(self, val):
+        self.following_mode = val
+
+
     def process_image(self, img):
         mask = self.image_to_mask(img)
         if self._last_img is None:
@@ -115,28 +136,63 @@ class FlowGANImageProcessor(ImageProcessor):
 
     def mask_to_curve(self, images):
 
-        # for key in images:
-        #     h = images[key].shape[0]
-        #     w = images[key].shape[1]
-        #     images[key] = images[key][0:h,int(0):int(300)]
-        #     self.show_image(images[key],"debug")
-            # images[image] = images[image][w/2-100:w/2+100, 0:h]
-        from LeaderDetector import LeaderDetector
-        leader_detect = LeaderDetector(images, b_output_debug=True, b_recalc=True)
-        # TODO: This seems to have potentially weird behavior if multiple leaders are detected?
-        if not leader_detect.vertical_leader_quads:
+        is_init = self.last_center_guess is None
+
+        from LeaderDetector import LeaderDetectorCleaned
+        detection = LeaderDetectorCleaned(images, guess_center=self.last_center_guess, guess_vec=self.last_vector_guess)
+        self._last_detection = detection
+        if not detection.quads:
             return None
-        return leader_detect.vertical_leader_quads[-1]
 
-    def visualize(self, target=None, arrows=None, title='Output'):
+        # TODO: THIS IS DUPLICATED CODE - Ideally should be refactored into the FTL Controller
+        # Would be refactored by returning all detected curves
+        if self.following_mode:
+            self.selected_idx = np.argmax(detection.scores)
+            quad = detection.quads[self.selected_idx]
+            ts = np.linspace(0, 1, num=101)
+            eval_pts = quad.pt_axis(ts)
+            closest_idx = np.argmin(np.abs(eval_pts[:, 1] - images['RGB0'].shape[0] / 2))
+            target_pt = eval_pts[closest_idx]
+            gradient = quad.tangent_axis(ts[closest_idx])
+            gradient /= np.linalg.norm(gradient)
 
-        if self._last_img is None:
+            if self.last_center_guess is not None:
+                target_move = np.linalg.norm(self.last_center_guess - target_pt)
+                if target_move > self.target_jump_rejection:
+                    print('Target moved too much ({:.1f} px), rejecting!'.format(target_move))
+                    return None
+
+            self.last_center_guess = target_pt
+            self.last_vector_guess = gradient
+
+            print('[DEBUG] {}Assigned score was {:.5f}'.format('[INIT] ' if is_init else '', np.max(detection.scores)))
+
+        else:
+            self.selected_idx = np.argmax(detection.scores)
+            quad = detection.quads[self.selected_idx]
+
+        return quad
+
+
+    def visualize(self, target=None, arrows=None, title='Output', mask_factor=0.7):
+
+        if self._last_img is None or self._last_mask is None:
             return
 
         if arrows is None:
             arrows = []
 
-        img = self._last_img.copy()
+        # Construct overlay mask - Green represents the chosen submask and red represents rejected submasks
+        detection = self._last_detection
+        base_mask = self._last_mask
+        if len(detection.scores):
+            chosen_idx = self.selected_idx
+            new_mask = np.zeros(base_mask.shape, dtype=np.uint8)
+            for i, submask in enumerate(detection.masks):
+                new_mask[submask] = [0, 255, 0] if chosen_idx == i else [0, 0, 255]
+            base_mask = base_mask * 0.5 + new_mask * 0.5
+
+        img = (mask_factor * base_mask + (1 - mask_factor) * self._last_img).astype(np.uint8).copy()
         h, w = img.shape[:2]
 
         # Draw diagnostics for centering
@@ -146,8 +202,8 @@ class FlowGANImageProcessor(ImageProcessor):
         if target is not None:
             cv.circle(img, (int(target[0]),int(target[1])), 2, (0, 0, 255), -1)
 
-        # for start, end, color in arrows:
-        #     cv.arrowedLine(img, start, end, color, 3)
+        for start, end, color in arrows:
+            cv.arrowedLine(img, start, end, color, 3)
 
         cv.imshow(title, img)
         cv.waitKey(1)

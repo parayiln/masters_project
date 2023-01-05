@@ -403,71 +403,71 @@
     <child link="tool0"/>
   </joint>
 
-  <link name="cutter">
-    <visual>
-      <origin rpy="0 0 1.57" xyz="0 0 0.0"/>
-      <geometry>
-        <mesh filename="package://masters_project/meshes/visual/cutter_top_mount.obj" scale="1.0 1.0 1.0 "/>
-      </geometry>
-      <material name="LightGrey" />
-    </visual>
+<!--  <link name="cutter">-->
+<!--    <visual>-->
+<!--      <origin rpy="0 0 1.57" xyz="0 0 0.0"/>-->
+<!--      <geometry>-->
+<!--        <mesh filename="package://masters_project/meshes/visual/cutter_top_mount.obj" scale="1.0 1.0 1.0 "/>-->
+<!--      </geometry>-->
+<!--      <material name="LightGrey" />-->
+<!--    </visual>-->
 
-     <collision>
-      <origin rpy="0 0 1.57" xyz="0 0 0.0"/>
-      <geometry>
-        <mesh filename="package://masters_project/meshes/collision/cutter_top_mount.obj" scale="1.0 1.0 1.0"/>
-      </geometry>
-    </collision>
+<!--     <collision>-->
+<!--      <origin rpy="0 0 1.57" xyz="0 0 0.0"/>-->
+<!--      <geometry>-->
+<!--        <mesh filename="package://masters_project/meshes/collision/cutter_top_mount.obj" scale="1.0 1.0 1.0"/>-->
+<!--      </geometry>-->
+<!--    </collision>-->
 
-    <inertial>
-      <origin rpy="0 0 0" xyz="1.0E-08 1.0E-08 1.0E-08"/>
-      <mass value="1.0E-08"/>
-      <inertia ixx="1.0E-08" ixy="1.0E-08" ixz="1.0E-08" iyy="1.0E-08" iyz="1.0E-08" izz="1.0E-08"/>
-    </inertial>
-  </link>
-  <joint name="cutter" type="fixed">
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <parent link="tool0"/>
-    <child link="cutter"/>
-  </joint>
-  <link name="endpoint">
-    <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <geometry>
-        <sphere radius="0.00001" />
-      </geometry>
-      <material name="red">
-        <color rgba="1 0 0 0" />
-      </material>
-    </visual>
-  </link>
-  <joint name="endpoint" type="fixed">
-<!--    <origin rpy="0 0 0" xyz="0 0.09721 0.24210"/>  &lt;!&ndash; Left down out &ndash;&gt;-->
-<!--    <origin rpy="0 0 0" xyz="-0.00425 0.08971 0.24210"/> &lt;!&ndash;USE THIS ONE IF THE IK FOR BELOW DOESNT DO BETTER&ndash;&gt;-->
-    <origin rpy="0 0 0" xyz="-0.063175 0 0.12864"/>
-<!--    <origin rpy="0 0 3.14159" xyz="-0.09425 -0.00511 0.09707"/>-->
+<!--    <inertial>-->
+<!--      <origin rpy="0 0 0" xyz="1.0E-08 1.0E-08 1.0E-08"/>-->
+<!--      <mass value="1.0E-08"/>-->
+<!--      <inertia ixx="1.0E-08" ixy="1.0E-08" ixz="1.0E-08" iyy="1.0E-08" iyz="1.0E-08" izz="1.0E-08"/>-->
+<!--    </inertial>-->
+<!--  </link>-->
+<!--  <joint name="cutter" type="fixed">-->
+<!--      <origin rpy="0 0 0" xyz="0 0 0"/>-->
+<!--    <axis xyz="0 0 1"/>-->
+<!--    <parent link="tool0"/>-->
+<!--    <child link="cutter"/>-->
+<!--  </joint>-->
+<!--  <link name="endpoint">-->
+<!--    <visual>-->
+<!--      <origin rpy="0 0 0" xyz="0 0 0"/>-->
+<!--      <geometry>-->
+<!--        <sphere radius="0.00001" />-->
+<!--      </geometry>-->
+<!--      <material name="red">-->
+<!--        <color rgba="1 0 0 0" />-->
+<!--      </material>-->
+<!--    </visual>-->
+<!--  </link>-->
+<!--  <joint name="endpoint" type="fixed">-->
+<!--&lt;!&ndash;    <origin rpy="0 0 0" xyz="0 0.09721 0.24210"/>  &lt;!&ndash; Left down out &ndash;&gt;&ndash;&gt;-->
+<!--&lt;!&ndash;    <origin rpy="0 0 0" xyz="-0.00425 0.08971 0.24210"/> &lt;!&ndash;USE THIS ONE IF THE IK FOR BELOW DOESNT DO BETTER&ndash;&gt;&ndash;&gt;-->
+<!--    <origin rpy="0 0 0" xyz="-0.063175 0 0.12864"/>-->
+<!--&lt;!&ndash;    <origin rpy="0 0 3.14159" xyz="-0.09425 -0.00511 0.09707"/>&ndash;&gt;-->
 
-    <axis xyz="0 0 1"/>
-    <parent link="cutter"/>
-    <child link="endpoint"/>
-  </joint>
-  <link name="cutpoint">
-    <visual>
-      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
-      <geometry>
-        <sphere radius="0.000001" />
-      </geometry>
-      <material name="green">
-        <color rgba="0 1 0 0" />
-      </material>
-    </visual>
-  </link>
-  <joint name="cutpoint" type="fixed">
-    <origin rpy="0 0 0" xyz="0 0 0"/>  <!-- Left down out -->
-    <parent link="endpoint"/>
-    <child link="cutpoint"/>
-  </joint>
+<!--    <axis xyz="0 0 1"/>-->
+<!--    <parent link="cutter"/>-->
+<!--    <child link="endpoint"/>-->
+<!--  </joint>-->
+<!--  <link name="cutpoint">-->
+<!--    <visual>-->
+<!--      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>-->
+<!--      <geometry>-->
+<!--        <sphere radius="0.000001" />-->
+<!--      </geometry>-->
+<!--      <material name="green">-->
+<!--        <color rgba="0 1 0 0" />-->
+<!--      </material>-->
+<!--    </visual>-->
+<!--  </link>-->
+<!--  <joint name="cutpoint" type="fixed">-->
+<!--    <origin rpy="0 0 0" xyz="0 0 0"/>  &lt;!&ndash; Left down out &ndash;&gt;-->
+<!--    <parent link="endpoint"/>-->
+<!--    <child link="cutpoint"/>-->
+<!--  </joint>-->
 <!--  <link name="cutter_mouth">-->
 <!--    <visual>-->
 <!--      <origin rpy="0 0 3.1416" xyz="0.0 0.0 0.0"/>-->

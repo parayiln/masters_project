@@ -91,14 +91,15 @@ class FollowTheLeaderController():
         self.do_visualize = visualize
 
         # Scanning behavior setup
-        self.branch_no_to_scan = 2
+        self.branch_no_to_scan = 5
         self.post_scan_move_dist = 0.10
         self.branch_lower_limit = 0.32
         self.branch_upper_limit = .8
         # self.controller_freq = 20 #HSV            # Set to 0 if you want the controller to run every iteration
         self.controller_freq = 5   #flownet
         self.cmd_joint_vel_control = -.1
-        self.scan_velocity = 0.025
+        self.scan_velocity = 0.075
+        self.no_curve_tolerance = 5     # Number of missed curve detections before exiting follow the leader
 
         # State variables
         self.state = StateMachine.START
@@ -108,6 +109,8 @@ class FollowTheLeaderController():
         self.last_time = 0.0
         self.current_target = None
         self.viz_arrows = []
+        self.no_curve_counter = 0
+        self.last_gradient = None
 
         # Logging variables
         self.error_integral = 0
@@ -164,19 +167,27 @@ class FollowTheLeaderController():
     def compute_velocity_from_curve(self, curve, ee_pos, time_elapsed, execute=True):
         target_pt, t = self.get_pixel_target_from_curve(curve)
         if target_pt is None:
-            return None
+            if self.last_gradient is not None:
+                gradient = self.last_gradient
+                vel = self.last_gradient * self.scan_velocity
+                correction_term = 0.0
+                target_pt = np.array([self.robot.width / 2, self.robot.height / 2])
+            else:
+                return None
+        else:
 
-        gradient = curve.tangent_axis(t)
-        gradient /= np.linalg.norm(gradient)
+            gradient = curve.tangent_axis(t)
+            gradient /= np.linalg.norm(gradient)
+            # Flip the sign of the gradient if the gradient is in the opposite direction of the scan direction
+            # Note that positive gradient means moving down whereas positive direction means moving up, hence the ==
+            if np.sign(gradient[1]) == self.direction:
+                gradient *= -1
+            self.last_gradient = gradient
 
-        # Flip the sign of the gradient if the gradient is in the opposite direction of the scan direction
-        # Note that positive gradient means moving down whereas positive direction means moving up, hence the ==
-        if np.sign(gradient[1]) == self.direction:
-            gradient *= -1
-        vel = gradient * self.scan_velocity
-        correction_term = self.controller.get_pi_values(target_pt, time_elapsed)
-        vel[0] += correction_term
-        vel *= self.scan_velocity / np.linalg.norm(vel)
+            vel = gradient * self.scan_velocity
+            correction_term = self.controller.get_pi_values(target_pt, time_elapsed)
+            vel[0] += correction_term
+            vel *= self.scan_velocity / np.linalg.norm(vel)
 
         if execute:
             vel_array = np.array([vel[0], vel[1], 0, 0, 0, 0])
@@ -226,10 +237,12 @@ class FollowTheLeaderController():
 
     def switch_to_leader_follow(self):
         self.state = StateMachine.LEADER_FOLLOW
+        self.img_process.set_following_mode(True)
 
     def deactivate_leader_follow(self):
         self.robot.handle_control_velocity(np.zeros(6))
         self.controller.reset()
+        self.img_process.reset()
         self.viz_arrows = []
 
         if self.num_branches_scanned >= self.branch_no_to_scan:
@@ -272,6 +285,15 @@ class FollowTheLeaderController():
         elif self.state == StateMachine.LEADER_FOLLOW:
 
             curve = self.img_process.curve
+            if curve is None:
+                self.no_curve_counter += 1
+                if self.no_curve_counter >= self.no_curve_tolerance:
+                    self.img_process.reset()
+                    self.img_process.set_following_mode(True)
+                    self.no_curve_counter = 0
+            else:
+                self.no_curve_counter = 0
+
             self.compute_velocity_from_curve(curve, ee_pos, time_elapsed, execute=True)
             if self.leader_follow_is_done():
                 print("this should not be the case")

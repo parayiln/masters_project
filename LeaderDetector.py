@@ -40,7 +40,7 @@ class LeaderDetector:
         LeaderDetector._x_grid, LeaderDetector._y_grid = np.meshgrid(np.linspace(0.5, LeaderDetector._width - 0.5, LeaderDetector._width), np.linspace(0.5,  LeaderDetector._height -  0.5,  LeaderDetector._height))
 
     # def __init__(self, path, image_name, b_output_debug=True, b_recalc=False):
-    def __init__(self, image_dict, b_output_debug=True, b_recalc=False):
+    def __init__(self, image_dict, b_output_debug=True, b_recalc=False, guess=None):
         """ Read in the image, mask image, flow image, 2 rgb images
         @param path: Directory where files are located
         @param image_name: image number/name as a string
@@ -58,7 +58,7 @@ class LeaderDetector:
         # self.images = self.read_images(path, image_name)
         self.images = image_dict
         # Split the mask into connected components, each of which might be a vertical leader
-        self.vertical_leader_masks = self.split_mask(self.images["Mask"], b_one_mask=True, b_debug=b_output_debug)
+        self.vertical_leader_masks = self.split_mask(self.images["Mask"], b_one_mask=False, b_debug=b_output_debug)
         self.vertical_leader_stats = []
         self.vertical_leader_quads = []
         self.bezier_mpt = None
@@ -120,7 +120,6 @@ class LeaderDetector:
             image_mask = np.zeros(self.images["Mask"].shape, dtype=self.images["Mask"].dtype)
             fname_quad = path_calculated + self.name + "_" + image_name + f"_{i}_quad.json"
             fname_params = path_calculated + self.name + "_" + image_name + f"_{i}_quad_params.json"
-            quad = None
             if exists(fname_quad) and not b_recalc:
                 quad = Quad([0, 0], [1,1], 1)
                 quad.read_json(fname_quad)
@@ -475,6 +474,81 @@ class LeaderDetector:
             # print(f"Warning: not consistant {self.name} {stats_slice}")
             pass
         return perc_consistant, diff / (len(stats_slice) - 1)
+
+
+
+class LeaderDetectorCleaned(LeaderDetector):
+    def __init__(self, image_dict, guess_center=None, guess_vec=None):
+
+        self.images = image_dict
+
+        master_mask = image_dict['Mask']
+        masks = self.split_mask(master_mask, b_one_mask=False, b_debug=False)
+        all_stats = [self.stats_image(master_mask, submask) for submask in masks]
+        quads = [self.fit_quad((mask * 255).astype(np.uint8), pts=stats, b_output_debug=False)[0] for mask, stats in zip(masks, all_stats)]
+        scores = np.array([self.score_quad(quad, mask, guess_center=guess_center, guess_vec=guess_vec) for quad, mask in zip(quads, masks)])
+
+        self.masks = masks
+        self.quads = quads
+        self.scores = scores
+
+    def score_quad(self, quad, mask, guess_center=None, guess_vec=None):
+
+        h, w = mask.shape[:2]
+
+        # If we have a guess, check the proximity of each mask to the center
+        if guess_center is not None:
+
+            guess_center = np.array(guess_center).astype(np.int32)
+            center_yx = (guess_center[1], guess_center[0])
+            if mask[center_yx]:
+                score = 0
+            else:
+                px = np.array(np.where(mask)).T
+                score = np.linalg.norm(px - center_yx, axis=1).min() / np.linalg.norm([h, w])
+
+            # If we have a guess vector, find the closest point on the quad and check the similarity
+            if guess_vec is not None:
+                guess_vec = np.array(guess_vec)
+                guess_vec /= np.linalg.norm(guess_vec)
+                ts = np.linspace(0, 1, 101)
+                quad_pts = quad.pt_axis(ts)
+                t_closest = ts[np.linalg.norm(quad_pts - guess_center, axis=1).argmin()]
+                tangent = quad.tangent_axis(t_closest)
+                tangent /= np.linalg.norm(tangent)
+                dot_prod = guess_vec.dot(tangent)
+                score *= min(1 - dot_prod, 1 + dot_prod)
+
+            # Right now score of 0 is best - Flip it around
+            score = 1 - score
+
+        else:
+            # If we don't have any initial guess, evaluate each quad and see which one maximizes the overlap, score is
+            # just the leftwards distance to the center of the curve
+
+            ts = np.linspace(0, 1, 101)
+            pts = quad.pt_axis(ts)
+            closest_idx = np.argmin(np.abs(pts[:,1] - h / 2))
+            dist = w / 2 - pts[closest_idx][0]
+            # WARNING: MAGIC NUMBER
+            if dist < -20:
+                score = 0
+            else:
+                score = 1 - abs(dist) / (w / 2)
+
+            # ts = np.linspace(0, 1, 101)
+            # pts_raw = quad.pt_axis(ts)
+            # pts = pts_raw.astype(np.uint32)
+            # curve_length = np.linalg.norm(pts_raw[:-1] - pts_raw[1:], axis=1).sum()
+            # # Filter out for rounding errors that go out of bounds
+            # xs = pts[:,0]
+            # ys = pts[:,1]
+            # keep = (xs >= 0) & (xs < w) & (ys >= 0) & (ys < h)
+            # pts = pts[keep]
+            # idx = tuple([pts[:,1], pts[:,0]])
+            # score = curve_length * mask[idx].sum() / len(pts)
+
+        return score
 
 
 if __name__ == '__main__':
