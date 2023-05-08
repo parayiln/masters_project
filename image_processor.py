@@ -1,5 +1,4 @@
 import os.path
-from ast import Pass
 import numpy as np
 import cv2 as cv
 import time
@@ -52,7 +51,7 @@ class FlowGANImageProcessor(ImageProcessor):
 
         # State variables for mask tracking
         # This really shouldn't be part of this class, but oh well...
-        self.target_jump_rejection = 40
+        self.target_jump_rejection = 500
         self.last_center_guess = None
         self.last_vector_guess = None
         self.selected_idx = None
@@ -198,17 +197,23 @@ class FlowGANImageProcessor(ImageProcessor):
         h, w = img.shape[:2]
 
         # Draw diagnostics for centering
-        cv.line(img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+        # cv.line(img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
         cv.line(img, (0, h // 2), (w, h // 2), (0, 0, 0), 2)
-        cv.circle(img, (w // 2, h // 2), 2, (0, 255, 0), -1)
-        if target is not None:
-            cv.circle(img, (int(target[0]),int(target[1])), 2, (0, 0, 255), -1)
+        # cv.circle(img, (w // 2, h // 2), 2, (0, 255, 0), -1)
 
+        if self.curve:
+            pts = self.curve.pt_axis(np.linspace(0,1,100)).astype(np.int32)
+            cv2.polylines(img, [pts.reshape((-1, 1, 2))], False, (0, 0, 255), 2)
+
+        if target is not None:
+            cv.circle(img, (int(target[0]),int(target[1])), 4, (255, 0, 0), -1)
         for start, end, color in arrows:
             cv.arrowedLine(img, start, end, color, 3)
 
         cv.imshow(title, img)
         cv.waitKey(1)
+
+        return img
 
 
 class HSVBasedImageProcessor(ImageProcessor):
@@ -372,13 +377,47 @@ def clamp_point(pt, *ranges):
 
 if __name__ == '__main__':
 
-    from PIL import Image
-    test_img_loc = os.path.join(os.path.expanduser('~'), 'test')
-    files = ['test_0.png', 'test_1.png']
-    imgs = [np.asanyarray(Image.open(os.path.join(test_img_loc, file))).astype(np.uint8)[:,:,:3] for file in files]
-    img_size = (imgs[0].shape[1], imgs[0].shape[0])
-    img_proc = FlowGANImageProcessor(img_size)
+    import cv2
+    proc = FlowGANImageProcessor((424, 240))
 
-    img_proc.image_to_mask(imgs[0])
-    mask = img_proc.image_to_mask(imgs[1])
-    Image.fromarray(mask).save(os.path.join(test_img_loc, 'mask.png'))
+    vid_root = os.path.join(os.path.expanduser('~'), 'Videos', 'ftl')
+    vids = [os.path.join(vid_root, file) for file in os.listdir(vid_root)]
+    out_root = os.path.join(vid_root, 'outputs')
+
+
+
+    fmt = cv2.VideoWriter_fourcc(*'MP4V')
+    out = cv2.VideoWriter(os.path.join(out_root, f'ftl_results.mp4'), fmt, 10.0,
+                          (848, 240))
+
+    try:
+        for vid in vids:
+            proc.reset()
+            proc.set_following_mode(True)
+            cap = cv2.VideoCapture(vid)
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                rgb = frame[:240,:424]
+                proc.process_image(rgb)
+                img = proc.visualize(proc.last_center_guess)
+                if img is None:
+                    continue
+                combined = np.concatenate([rgb, img], axis=1)
+                out.write(combined)
+    finally:
+        out.release()
+
+
+    # from PIL import Image
+    # test_img_loc = os.path.join(os.path.expanduser('~'), 'test')
+    # files = ['test_0.png', 'test_1.png']
+    # imgs = [np.asanyarray(Image.open(os.path.join(test_img_loc, file))).astype(np.uint8)[:,:,:3] for file in files]
+    # img_size = (imgs[0].shape[1], imgs[0].shape[0])
+    # img_proc = FlowGANImageProcessor(img_size)
+    #
+    # img_proc.image_to_mask(imgs[0])
+    # mask = img_proc.image_to_mask(imgs[1])
+    # Image.fromarray(mask).save(os.path.join(test_img_loc, 'mask.png'))

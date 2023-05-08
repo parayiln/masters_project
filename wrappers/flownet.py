@@ -7,7 +7,7 @@ import argparse
 import torch
 from time import time
 
-install_path = os.path.join(os.path.expanduser('~'), '/home/nidhi/repos_followLeader')
+install_path = os.path.join(os.path.expanduser('~'), 'repos')
 sys.path.append(install_path)
 
 from flownet2pytorch.models import FlowNet2

@@ -45,7 +45,7 @@ def process_bag(file, output_file=None, annotations_folder=None):
                 if queued_diagnostic_img is None:
                     queued_diagnostic_img = np.zeros(img.shape, dtype=np.uint8)
 
-                final_img = np.concatenate([img, queued_diagnostic_img], axis=1)
+                final_img = np.concatenate([cv2.cvtColor(img, cv2.COLOR_RGB2BGR), queued_diagnostic_img], axis=1)
                 video_writer.write(final_img)
 
                 if img_idx in annotations_index:
@@ -104,17 +104,38 @@ def process_diagnostic_img(img):
     mask_overlay_factor = 0.7
     base_img = mask_overlay_factor * base_mask + (1 - mask_overlay_factor) * rgb
 
+    arrows = []
     leader_detect = LeaderDetector(images, b_output_debug=False, b_recalc=True)
     if leader_detect.vertical_leader_quads:
         quad = leader_detect.vertical_leader_quads[-1]
-        pts = quad.pt_axis(np.linspace(0, 1, 100)).astype(np.int32)
+        ts = np.linspace(0, 1, 101)
+        pts = quad.pt_axis(ts).astype(np.int32)
+        idx_closest = np.argmin(np.abs(pts[:,1] - h / 2))
+        target_pt = pts[idx_closest]
+        gradient = quad.tangent_axis(ts[idx_closest])
+        gradient /= np.linalg.norm(gradient)
+        if gradient[1] < 0:
+            gradient *= -1
 
+        scan_vel = 0.05
+        correction_term = np.radians(69.8) * (target_pt[0] - w / 2) / w * 0.8
+        vel = gradient * scan_vel + np.array([correction_term, 0])
+        vel_norm = vel / np.linalg.norm(vel)
+
+        vl = 75
+        arrows = [
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + gradient * vl).astype(np.int64)), (0, 255, 0)],
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + np.array([(correction_term / scan_vel), 0]) * vl).astype(np.int64)), (0, 0, 255)],
+            [tuple(target_pt.astype(np.int64)), tuple((target_pt + vel_norm * vl).astype(np.int64)), (0, 255, 255)],
+        ]
         cv2.polylines(base_img, [pts.reshape((-1,1,2))], False, (0, 0, 255), 2)
-        cv2.line(base_img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
-        cv2.line(base_img, (0, h // 2), (w, h // 2), (0, 0, 0), 2)
-        cv2.circle(base_img, (w // 2, h // 2), 4, (0, 255, 0), -1)
 
+    cv2.line(base_img, (w // 2, 0), (w // 2, h), (0, 0, 0), 2)
+    cv2.line(base_img, (0, h // 2), (w, h // 2), (0, 0, 0), 2)
+    cv2.circle(base_img, (w // 2, h // 2), 4, (0, 255, 0), -1)
 
+    for start, end, color in arrows:
+        cv2.arrowedLine(base_img, start, end, color, 2)
 
     return base_img.astype(np.uint8)
 
